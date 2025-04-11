@@ -1,0 +1,6 @@
+langchain_openai 
+crewai 
+pymongo 
+python-jose[cryptography] 
+passlib[bcrypt]
+fastapi[standard]
