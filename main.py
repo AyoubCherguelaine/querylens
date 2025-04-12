@@ -3,10 +3,11 @@ from fastapi import FastAPI
 app = FastAPI()
 from db.db import MongoDBClient
 from users.routers import router as user_router # Import routers from other files
-
+from chats.routers import router as chat_router
 
 # Include the routers
 app.include_router(user_router)
+app.include_router(chat_router)
 
 @app.get("/")
 def read_root():

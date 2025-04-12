@@ -12,8 +12,9 @@ class MongoDBClient:
     _instance: Optional['MongoDBClient'] = None
     users_collection: Optional[Collection] = None
     cubes_collection: Optional[Collection] = None
-    schemas_chats_collection: Optional[Collection] = None
-
+    sessions_collection :Optional[Collection] = None
+    schemas_collection: Optional[Collection] = None
+    
     def __new__(cls, mongo_url: str = None, db_name: str = "chat_olap"):
         """
         Ensure only one instance of MongoDBClient is created (Singleton Pattern).
@@ -59,7 +60,6 @@ class MongoDBClient:
             self.cubes_collection = self.db["cubes"]
             self.sessions_collection = self.db["sessions"]
             self.schemas_collection = self.db["schemas"]
-            self.schemas_chats_collection = self.db["schemas_chats"]
         
         except ConnectionFailure as e:
             print(f"Failed to connect to MongoDB Atlas: {e}")

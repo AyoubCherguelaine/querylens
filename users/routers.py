@@ -56,7 +56,11 @@ async def login(user: UserLogin):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not db_user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Account disabled")
-    token = create_access_token({"sub": db_user["email"]})
+    token = create_access_token(
+        {"sub": db_user["email"], "is_admin": db_user["is_admin"],
+         "is_active": db_user["is_active"],
+         "_id": str(db_user["_id"])}
+    )
     return {"access_token": token, "user": UserOut(**db_user)}
 
 

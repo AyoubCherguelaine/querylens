@@ -7,3 +7,5 @@ def hash_password(password: str):
 
 def verify_password(plain_password: str, hashed: str):
     return pwd_context.verify(plain_password, hashed)
+
+

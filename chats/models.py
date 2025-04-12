@@ -1,50 +1,79 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from bson import ObjectId
 
-class chats(BaseModel):
-    _id = ObjectId
-    user_id: ObjectId
-    user_message: str
-    timestamp: str
-    # after that we will extract bot as an object
-    bot_response: str
-    cube_id: ObjectId
+from db.utils import PyObjectId
 
 
-class chatsOut(BaseModel):
-    _id = ObjectId
-    user_id: ObjectId
+class Chats(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: PyObjectId
     user_message: str
     timestamp: str
     bot_response: str
-    cube_id: ObjectId
+    data_example: str
+    cube_id: Optional[PyObjectId] = None
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        validate_by_name = True
 
 
-class chatCreate(BaseModel):
-    user_id: ObjectId
+class ChatsOut(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: Optional[PyObjectId] = None
     user_message: str
     timestamp: str
     bot_response: str
-    cube_id: ObjectId
+    data_example: str
+    cube_id: Optional[PyObjectId] = None
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        validate_by_name = True
 
 
-class sessions(BaseModel):
-    _id = ObjectId
-    user_id: ObjectId
-    session_id: str
+class ChatCreate(BaseModel):
+    user_id: Optional[PyObjectId] = None
+    user_message: str
     timestamp: str
-    messages: List[chats]
-    
-class sessionsCreate(BaseModel):
-    user_id: ObjectId
-    session_id: str
-    timestamp: str
-    messages: List[chats] | None = []
+    bot_response: str
+    data_example: str
+    cube_id: Optional[PyObjectId] = None
 
-class sessionsOut(BaseModel):
-    _id = ObjectId
-    user_id: ObjectId
-    timestamp: str
-    messages: List[chats]
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        validate_by_name = True
 
+
+class Sessions(BaseModel):
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    user_id: Optional[PyObjectId] = None
+    timestamp: str
+    messages: List[Chats]
+    cube_id: Optional[PyObjectId] = None
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        validate_by_name = True
+
+
+class SessionsCreate(BaseModel):
+    user_id: Optional[PyObjectId] = None
+    timestamp: str
+    messages: Optional[List[Chats]] = []
+    cube_id: Optional[PyObjectId] = None
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        validate_by_name = True
+
+class SessionsOut(BaseModel):
+    id: str = Field(default=None, alias="_id")
+    user_id: str = None
+    timestamp: str
+    messages: List[Chats]
+    cube_id: str = None
