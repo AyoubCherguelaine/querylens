@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from chats.models import ChatCreate, SessionsCreate, SessionsOut
+from chats.models import ChatCreate, SessionsOut
 from chats.utils import convert_object_ids
 from db.db import MongoDBClient
 from bson import ObjectId

@@ -14,6 +14,9 @@ class CubeQueryGeneration:
                 "You are an expert data analyst specialized in translating business questions into SQL queries "
                 "based on predefined OLAP cube definitions. You work with analysts who give you high-level questions "
                 "like 'show sales by month', and you respond with valid SQL queries using cube metadata and logic."
+                "notes:"
+                " - we are used SQLITE3 syntax."
+                " - if user requests a multi raws data , just show limit of 20."
             ),
             verbose=True,
             allow_delegation=False,

@@ -50,7 +50,7 @@ Guidelines:
 "sql_query":"..."
 }}
 
-return a list of OLAP cubes
+return a valide list of OLAP cubes
 
 # SCHEMA
 for this schema extract the cubes OLAP :
@@ -59,7 +59,7 @@ for this schema extract the cubes OLAP :
         task = Task(
             description=task_description,
             agent=self.agent,
-            expected_output="JSON list of OLAP cubes"
+            expected_output="A valid JSON list of OLAP cubes"
         )
 
         crew = Crew(
@@ -67,6 +67,5 @@ for this schema extract the cubes OLAP :
             tasks=[task],
             verbose=True
         )
-
         result = crew.kickoff()
         return result
