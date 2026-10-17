@@ -8,8 +8,14 @@ export type Cube = {
     grain: string;
     estimated_rows: number;
     dimensions: string[];
-    measures: { field: string | null; aggregation: string }[];
-    fields: { name: string; type: string; key: boolean; nullable: boolean }[];
+    kind?: "fact" | "entity" | "bridge" | "snapshot";
+    description?: string;
+    classification_reason?: string;
+    time_dimensions?: string[];
+    suggested_questions?: string[];
+    joins?: { path: string; schema: string; table: string; cardinality: string; evidence: string }[];
+    measures: { field: string | null; aggregation: string; label?: string; description?: string; additivity?: string }[];
+    fields: { name: string; type: string; key: boolean; nullable: boolean; role?: string; description?: string }[];
     warnings: string[];
   };
 };

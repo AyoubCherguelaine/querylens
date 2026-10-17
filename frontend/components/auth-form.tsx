@@ -84,10 +84,10 @@ export function AuthForm({ onSuccess }: { onSuccess: () => void }) {
               name="password"
               type="password"
               required
-              minLength={signup ? 12 : 1}
+              minLength={signup ? 8 : 1}
               maxLength={128}
               autoComplete={signup ? "new-password" : "current-password"}
-              placeholder={signup ? "At least 12 characters" : "Your password"}
+              placeholder={signup ? "At least 8 characters" : "Your password"}
             />
           </label>
           {error && (

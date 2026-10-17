@@ -13,10 +13,17 @@ def compile_plan(cube: dict, plan: Plan, max_rows: int = 200):
         raise ValueError("The plan requires clarification")
     fields = {f["name"]: f for f in cube["fields"]}
 
+    joins = cube.get("joins", [])
+    used_aliases = set()
+
     def field(name):
         if name not in fields:
             raise ValueError(f"Unknown field: {name}")
-        return quote(name)
+        metadata = fields[name]
+        alias = metadata.get("source_alias", "t0")
+        used_aliases.add(alias)
+        column = quote(metadata.get("source_column", name))
+        return f"{quote(alias)}.{column}" if joins else column
 
     if not plan.metrics:
         raise ValueError("Select at least one measure")
@@ -37,7 +44,16 @@ def compile_plan(cube: dict, plan: Plan, max_rows: int = 200):
                 raise ValueError("Only row count can omit a field")
             expression = "count(*)"
         else:
-            column = field(name)
+            candidate = next(
+                (m for m in cube["measures"] if m["field"] == name and m["aggregation"] == op), None
+            )
+            if candidate and candidate.get("recipe"):
+                recipe = candidate["recipe"]
+                if recipe["operation"] != "product" or len(recipe["fields"]) != 2:
+                    raise ValueError("Unsupported calculated measure")
+                column = "(" + " * ".join(f"({field(f)})::numeric" for f in recipe["fields"]) + ")"
+            else:
+                column = field(name)
             if op in {"sum", "avg", "min", "max"} and (name, op) not in candidates:
                 raise ValueError("Measure is not an approved cube candidate")
             expression = (
@@ -71,6 +87,25 @@ def compile_plan(cube: dict, plan: Plan, max_rows: int = 200):
                 f"{column} {operators[condition.operator]} ${len(parameters)}::text::{kind}"
             )
     sql = f"SELECT {', '.join(selects)} FROM {quote(cube['schema'])}.{quote(cube['table'])}"
+    if joins:
+        sql += ' AS "t0"'
+        # Include ancestors of requested dimensions, but skip unrelated paths.
+        for join in reversed(joins):
+            if join["alias"] in used_aliases:
+                used_aliases.add(join["source_alias"])
+        for join in joins:
+            if join["alias"] not in used_aliases:
+                continue
+            if join["cardinality"] != "many_to_one":
+                raise ValueError("Only validated to-one joins preserve the cube grain")
+            conditions = [
+                f"{quote(join['source_alias'])}.{quote(source)} = {quote(join['alias'])}.{quote(target)}"
+                for source, target in zip(join["columns"], join["target_columns"], strict=True)
+            ]
+            sql += (
+                f" LEFT JOIN {quote(join['schema'])}.{quote(join['table'])} AS {quote(join['alias'])} ON "
+                + " AND ".join(conditions)
+            )
     if predicates:
         sql += " WHERE " + " AND ".join(predicates)
     if groups:

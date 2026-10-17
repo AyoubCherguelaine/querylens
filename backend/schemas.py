@@ -10,7 +10,7 @@ class StrictModel(BaseModel):
 
 class Signup(StrictModel):
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(default="", max_length=100)
 
 

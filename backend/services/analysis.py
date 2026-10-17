@@ -32,7 +32,13 @@ async def execute_plan(pool, settings, cube, plan):
     fresh = next(
         (c for c in live if c["schema"] == cube["schema"] and c["table"] == cube["table"]), None
     )
-    if fresh is None or fresh["fields"] != cube["fields"] or fresh["measures"] != cube["measures"]:
+    if fresh is None or (
+        cube.get("model_version") != fresh.get("model_version")
+        or fresh.get("schema_signature") != cube.get("schema_signature")
+        or fresh["fields"] != cube["fields"]
+        or fresh["measures"] != cube["measures"]
+        or fresh.get("joins") != cube.get("joins")
+    ):
         raise ValueError("Source schema changed. Rediscover cubes before running this analysis.")
     sql, parameters, limit = compile_plan(cube, plan, settings.max_result_rows)
     async with readonly(pool, settings.query_timeout_ms) as connection:
@@ -45,8 +51,13 @@ async def execute_plan(pool, settings, cube, plan):
         {"key": f"g{i}", "label": group.field + (f" ({group.grain})" if group.grain else "")}
         for i, group in enumerate(plan.groups)
     ]
+    measure_labels = {(m["field"], m["aggregation"]): m.get("label") for m in cube["measures"]}
     columns += [
-        {"key": f"m{i}", "label": f"{metric.aggregation}({metric.field or '*'})"}
+        {
+            "key": f"m{i}",
+            "label": measure_labels.get((metric.field, metric.aggregation))
+            or f"{metric.aggregation}({metric.field or '*'})",
+        }
         for i, metric in enumerate(plan.metrics)
     ]
     answer = (
@@ -80,7 +91,7 @@ async def profile_cube(pool, settings, cube):
     from backend.services.compiler import quote
 
     # No row samples are sent to an LLM. This is an exact, timeout-bounded scan.
-    fields = cube["fields"][:64]
+    fields = [f for f in cube["fields"] if not f.get("source_alias")][:64]
     expressions = ["count(*) AS total_rows"]
     for index, field in enumerate(fields):
         column = quote(field["name"])

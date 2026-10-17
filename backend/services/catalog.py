@@ -1,11 +1,18 @@
+"""Read PostgreSQL metadata and build relationship-aware analytical models."""
+
 from collections import defaultdict
 
 from backend.database.pool import readonly
+from backend.services.semantic import (  # re-exported for compiler and legacy callers
+    NUMERIC,
+    SUPPORTED,
+    TEMPORAL,
+    TEXT,
+    build_cube,
+    model_schema,
+)
 
-NUMERIC = {"int2", "int4", "int8", "numeric", "float4", "float8"}
-TEMPORAL = {"date", "timestamp", "timestamptz"}
-TEXT = {"text", "varchar", "bpchar", "name"}
-SUPPORTED = NUMERIC | TEMPORAL | TEXT | {"bool", "uuid"}
+__all__ = ["NUMERIC", "SUPPORTED", "TEMPORAL", "TEXT", "build_cube", "discover"]
 
 
 async def discover(pool, settings, schemas=None, connection=None):
@@ -24,10 +31,15 @@ async def _discover(connection, schemas):
                t.typname AS type, NOT a.attnotnull AS nullable,
                EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conrelid=c.oid
                        AND k.contype IN ('p','f','u') AND a.attnum=ANY(k.conkey)) AS key,
-               GREATEST(c.reltuples, 0)::bigint AS estimated_rows
+               GREATEST(c.reltuples, 0)::bigint AS estimated_rows,
+               col_description(c.oid,a.attnum) AS description,
+               obj_description(c.oid,'pg_class') AS table_description,
+               s.null_frac AS null_fraction, s.n_distinct AS distinct_estimate
         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         JOIN pg_attribute a ON a.attrelid=c.oid
         JOIN pg_type t ON t.oid=a.atttypid
+        LEFT JOIN pg_stats s ON s.schemaname=n.nspname AND s.tablename=c.relname
+                            AND s.attname=a.attname AND NOT s.inherited
         WHERE n.nspname=ANY($1::text[]) AND c.relkind IN ('r','p')
           AND NOT c.relispartition AND a.attnum>0 AND NOT a.attisdropped
           AND has_table_privilege(c.oid, 'SELECT')
@@ -35,43 +47,26 @@ async def _discover(connection, schemas):
     """,
         schemas,
     )
+    constraints = await connection.fetch(
+        """
+        SELECT n.nspname AS schema, c.relname AS table, k.conname AS name,
+               k.contype::text AS kind, k.convalidated AS validated,
+               ARRAY(SELECT a.attname::text FROM unnest(k.conkey) WITH ORDINALITY x(num,ord)
+                     JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=x.num ORDER BY x.ord) AS columns,
+               tn.nspname AS target_schema, tc.relname AS target_table,
+               ARRAY(SELECT a.attname::text FROM unnest(k.confkey) WITH ORDINALITY x(num,ord)
+                     JOIN pg_attribute a ON a.attrelid=tc.oid AND a.attnum=x.num ORDER BY x.ord) AS target_columns
+        FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        LEFT JOIN pg_class tc ON tc.oid=k.confrelid
+        LEFT JOIN pg_namespace tn ON tn.oid=tc.relnamespace
+        WHERE n.nspname=ANY($1::text[]) AND k.contype IN ('p','u','f')
+          AND has_table_privilege(c.oid, 'SELECT')
+        ORDER BY n.nspname,c.relname,k.conname
+        """,
+        schemas,
+    )
     tables = defaultdict(list)
     for row in rows:
         tables[(row["schema"], row["table"])].append(dict(row))
-    return [build_cube(schema, table, columns) for (schema, table), columns in tables.items()]
-
-
-def build_cube(schema, table, columns):
-    fields = [
-        {"name": c["name"], "type": c["type"], "nullable": c["nullable"], "key": c["key"]}
-        for c in columns
-        if c["type"] in SUPPORTED
-    ]
-    return {
-        "name": table.replace("_", " ").title(),
-        "schema": schema,
-        "table": table,
-        "grain": f"One row of {schema}.{table}",
-        "fields": fields,
-        "dimensions": [
-            c["name"]
-            for c in fields
-            if c["type"] not in NUMERIC or c["key"] or c["name"].endswith("_id")
-        ],
-        "measures": [{"field": None, "aggregation": "count"}]
-        + [
-            {"field": c["name"], "aggregation": op}
-            for c in fields
-            if c["type"] in NUMERIC
-            and not c["key"]
-            and c["name"] != "id"
-            and not c["name"].endswith("_id")
-            for op in ("sum", "avg", "min", "max")
-        ],
-        "estimated_rows": columns[0].get("estimated_rows", 0) if columns else 0,
-        "warnings": [
-            "Numeric aggregates are candidates, not verified business metrics. Review units and additivity.",
-            "Single-table grain. Joins and cross-table measures are not inferred.",
-            "Row estimate comes from PostgreSQL statistics and may be stale.",
-        ],
-    }
+    return model_schema(tables, [dict(row) for row in constraints])

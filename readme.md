@@ -85,7 +85,7 @@ Views, virtual tables, generated columns, triggers, defaults, CHECK constraints,
 
 Existing PostgreSQL schemas are available through **Use this schema** when they are in `ANALYTICS_SCHEMAS` and contain accessible ordinary tables. The source is registered once and can be reopened later. Imported sources live in the application’s PostgreSQL database; existing sources use the configured analytics connection. A new migration backfills source records for legacy saved cubes, preserving their IDs and chat sessions.
 
-Agent analysis is scoped to the chosen source and can query its discovered tables, including joins. The chosen table provides the initial focus. Direct structured-plan analysis remains scoped to one table. Importing SQLite foreign keys preserves relationships in PostgreSQL. Numeric measures still require business review. Source dashboards contain real counts and metadata; no model generates their values.
+Agent analysis is scoped to the chosen source and can query its discovered tables, including joins. The chosen cube provides the initial business grain. Direct structured-plan analysis can use its declared to-one dimension paths. Importing SQLite foreign keys preserves relationships in PostgreSQL. Numeric measures still require business review. Source dashboards contain real counts and metadata; no model generates their values.
 
 ## Temporary demo
 
@@ -150,9 +150,10 @@ Structured logs go to stdout as JSON with request IDs, status, latency, model/to
 
 Discovery reads real table columns, PostgreSQL types, primary/foreign/unique keys, and planner row estimates. It includes ordinary and partitioned parent tables, skips partition children and views, and ignores unsupported types such as JSONB, arrays, and custom domains. A cube is a semantic definition, not a precomputed materialized cube.
 
-- Grain: one source table row. No guessed joins, relationships, business formulas, or automatic materialized views.
-- Measures: row count; numeric sum/average/min/max candidates excluding declared keys and conventional `id`/`*_id` columns; explicit count and distinct count.
-- Grouping: up to five source fields; day/week/month/quarter/year for dates and timestamps. Time grouping runs in UTC.
+- Schema analysis: reads primary, unique and foreign keys (including composite keys), table/column comments, and non-value column statistics. Classifies cubes as facts, entities, bridges or snapshots with an explanation and suggested questions. Unsupported types remain excluded.
+- Grain: one base record, identified by its declared primary key. Validated foreign keys expose related dimensions through up to three to-one hops, including role-playing paths such as billing and shipping customers. LEFT JOINs preserve missing relationships. Child collections are never expanded into a parent cube. Expansion is bounded to 32 joins and approximately 512 fields per cube.
+- Measures: record count; sum candidates for recognizable additive amounts/quantities; average/min/max for numeric attributes. Identifiers, codes and years are excluded from numeric measures. Prices, rates, ratios and balances are not automatically summed. When a row contains one quantity field and `unit_price`, an explicit candidate `__extended_amount` measure sums their product before adjustments; its definition includes the unit-price assumption. Parent amounts never become measures at the child grain.
+- Grouping: up to five base or related dimension fields, using the exact dotted semantic names; day/week/month/quarter/year for dates and timestamps. Time grouping runs in UTC.
 - Filters: typed equality, comparisons, literal substring matching, NULL checks; all combined with AND. Values are bound parameters.
 - Sorting: validated output aliases with stable secondary group ordering.
 - Limits: fetch one additional group to detect truncation; no misleading full-result totals from a limited result.
@@ -161,7 +162,7 @@ Discovery reads real table columns, PostgreSQL types, primary/foreign/unique key
 
 Direct structured-plan queries run inside read-only transactions with statement timeouts. Only server-discovered tables/columns and fixed aggregate/date functions reach compiled SQL. Unknown fields, unsupported metrics, invalid sorting, stale schemas, provider refusal, incomplete plans, and unavailable providers fail explicitly. Natural-language chat uses saved conversation and SQL evidence as context for follow-up questions.
 
-Numeric columns are candidates, not certified business measures: an exchange rate, balance, or percentage should not automatically be summed. Review units and additivity. The structured-plan API excludes joins, currency conversion, fiscal calendars, derived business metrics, forecasting, OR filters, and arbitrary SQL. The conversational agent can express joins, formulas and OR filters through validated SELECT SQL within its source; business definitions still need user confirmation. PostgreSQL planner row estimates can be stale; profiling computes exact counts.
+Numeric columns are candidates, not certified business measures: an exchange rate, balance, or percentage should not automatically be summed. Review units and additivity. The structured-plan API supports discovered to-one dimension joins and the explicit extended-amount recipe. It excludes arbitrary joins/formulas, currency conversion, fiscal calendars, forecasting, OR filters, and arbitrary SQL. Related-table schema and constraint changes invalidate saved models; use **Discover cubes** on existing sources to rebuild them after upgrading. The conversational agent can express joins, formulas and OR filters through validated SELECT SQL within its source; business definitions still need user confirmation. PostgreSQL planner row estimates can be stale; profiling computes exact counts.
 
 ## API examples
 

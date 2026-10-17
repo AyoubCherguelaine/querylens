@@ -471,7 +471,7 @@ export function Workspace() {
                           {cube.definition.schema}.{cube.definition.table}
                         </p>
                       </div>
-                      <span className="tag">Single-table cube</span>
+                      <span className="tag">{cube.definition.kind ? `${cube.definition.kind} cube` : "Source cube"}</span>
                     </div>
                     <div className="cube-stats">
                       <div>
@@ -522,7 +522,7 @@ export function Workspace() {
                   {tab === "schema" ? (
                     <section className="schema-card">
                       <div className="profile-heading">
-                        <h3>Source fields</h3>
+                        <h3>Business model</h3>
                         <button
                           className="secondary"
                           disabled={busy}
@@ -531,14 +531,26 @@ export function Workspace() {
                           Profile data quality
                         </button>
                       </div>
+                      <p>{cube.definition.description}</p>
                       <p className="muted">{cube.definition.grain}</p>
+                      {!!cube.definition.joins?.length && (
+                        <div className="source-relationships">
+                          <h3>Related dimensions</h3>
+                          <p className="muted">These declared relationships preserve this cube’s grain. Related amounts stay in their own cubes.</p>
+                          {cube.definition.joins.map((join) => (
+                            <p className="relationship" key={join.path}>
+                              <strong>{join.path}</strong> → {join.schema}.{join.table} · many to one
+                            </p>
+                          ))}
+                        </div>
+                      )}
                       <div className="table-scroll">
                         <table>
                           <thead>
                             <tr>
                               <th>Field</th>
                               <th>PostgreSQL type</th>
-                              <th>Key</th>
+                              <th>Business role</th>
                               <th>Nullable</th>
                             </tr>
                           </thead>
@@ -549,7 +561,7 @@ export function Workspace() {
                                 <td>
                                   <code>{f.type}</code>
                                 </td>
-                                <td>{f.key ? "Yes" : "—"}</td>
+                                <td>{f.role?.replaceAll("_", " ") || (f.key ? "identifier" : "dimension")}</td>
                                 <td>{f.nullable ? "Yes" : "No"}</td>
                               </tr>
                             ))}
@@ -559,8 +571,8 @@ export function Workspace() {
                       <h3>Candidate measures</h3>
                       <div className="chips">
                         {cube.definition.measures.map((m, i) => (
-                          <span className="tag" key={i}>
-                            {m.aggregation}({m.field || "*"})
+                          <span className="tag" key={i} title={m.description}>
+                            {m.label || `${m.aggregation}(${m.field || "*"})`}
                           </span>
                         ))}
                       </div>
@@ -568,14 +580,25 @@ export function Workspace() {
                         <div className="source-relationships">
                           <h3>Imported relationships</h3>
                           <p className="muted">
-                            These keys are preserved in PostgreSQL. Each table
-                            has its own analytical cube.
+                            These keys are preserved in PostgreSQL and used to
+                            model related dimensions when they preserve the cube’s grain.
                           </p>
                           {importedTable.foreign_keys.map((key, index) => (
                             <p className="relationship" key={index}>
                               {key.columns.join(", ")} → {key.target_table} (
                               {key.target_columns.join(", ")})
                             </p>
+                          ))}
+                        </div>
+                      )}
+                      {!!cube.definition.suggested_questions?.length && (
+                        <div>
+                          <h3>Explore this model</h3>
+                          {cube.definition.suggested_questions.map((suggestion) => (
+                            <button className="secondary" key={suggestion} disabled={busy}
+                              onClick={() => { setQuestion(suggestion); setTab("analysis"); }}>
+                              {suggestion}
+                            </button>
                           ))}
                         </div>
                       )}
