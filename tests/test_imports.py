@@ -389,3 +389,14 @@ def test_migration_backfills_legacy_cubes_without_losing_history(client):
             await db.close()
 
     asyncio.run(verify())
+
+
+def test_imported_source_limit_per_account(client):
+    headers = account(client)
+    content = b"region,amount\nNorth,1\n"
+    assert upload(client, headers, content).status_code == 201
+    assert upload(client, headers, content).status_code == 201
+    third = upload(client, headers, content)
+    assert third.status_code == 422 and "2 imported-source limit" in third.json()["detail"]
+    other = account(client, "other@example.com")
+    assert upload(client, other, content).status_code == 201

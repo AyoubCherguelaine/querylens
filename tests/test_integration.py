@@ -357,3 +357,36 @@ def test_written_analysis_persists_and_supports_followup(client, monkeypatch):
     assert second.status_code == 200 and second.json()["report"]["summary"] == report["summary"]
     stored = client.get(f"/chat/session/{session}", headers=headers).json()["messages"]
     assert len(stored) == 2 and stored[0]["result"]["report"] == result["report"]
+
+
+def test_chat_and_question_quotas(client, monkeypatch):
+    from pydantic import SecretStr
+
+    headers = account(client)
+    cube_id = discover(client, headers)
+    client.app.state.settings.openai_api_key = SecretStr("test-key")
+
+    async def answer(pool, settings, definition, question, history, emit):
+        return {"status": "clarification", "answer": "ok"}
+
+    monkeypatch.setattr("backend.api.analytics.run_agent", answer)
+    sessions = [
+        client.post("/chat/session", headers=headers, json={"cube_id": cube_id}) for _ in range(10)
+    ]
+    assert all(s.status_code == 201 for s in sessions)
+    over = client.post("/chat/session", headers=headers, json={"cube_id": cube_id})
+    assert over.status_code == 409 and "10-chat limit" in over.json()["detail"]
+    endpoint = f"/chat/session/{sessions[0].json()['id']}/messages"
+    for _ in range(3):
+        assert client.post(endpoint, headers=headers, json={"question": "q"}).status_code == 200
+    blocked = client.post(endpoint, headers=headers, json={"question": "q"})
+    assert blocked.status_code == 409 and "3-question limit" in blocked.json()["detail"]
+    streamed = client.post(endpoint, headers=headers, json={"question": "q", "stream": True})
+    assert streamed.status_code == 409
+    other = account(client, "other@example.com")
+    assert (
+        client.post(
+            "/chat/session", headers=other, json={"cube_id": discover(client, other)}
+        ).status_code
+        == 201
+    )

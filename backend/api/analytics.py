@@ -62,14 +62,25 @@ async def run(request, definition, plan, pool=None):
 @router.post("/chat/session", status_code=201)
 async def new_session(body: SessionCreate, request: Request, user=Depends(current_user)):
     await owned_cube(request, body.cube_id, user["id"])
+    limit = request.app.state.settings.max_chat_sessions
     session_id = uuid4()
     async with request.app.state.db.acquire() as connection:
-        await connection.execute(
-            "INSERT INTO chat_olap.sessions(id,owner_id,cube_id) VALUES($1,$2,$3)",
-            session_id,
-            user["id"],
-            body.cube_id,
-        )
+        async with connection.transaction():
+            # Lock the user row so concurrent requests cannot both pass the quota check.
+            await connection.execute(
+                "SELECT 1 FROM chat_olap.users WHERE id=$1 FOR UPDATE", user["id"]
+            )
+            count = await connection.fetchval(
+                "SELECT count(*) FROM chat_olap.sessions WHERE owner_id=$1", user["id"]
+            )
+            if count >= limit:
+                raise HTTPException(409, f"This account has reached the {limit}-chat limit.")
+            await connection.execute(
+                "INSERT INTO chat_olap.sessions(id,owner_id,cube_id) VALUES($1,$2,$3)",
+                session_id,
+                user["id"],
+                body.cube_id,
+            )
     return {"id": session_id, "cube_id": body.cube_id}
 
 
@@ -115,7 +126,14 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
     settings = request.app.state.settings
     if not settings.openai_api_key.get_secret_value():
         raise HTTPException(503, "Configure OPENAI_API_KEY to use the conversational agent.")
+    limit = settings.max_questions_per_session
+    limit_message = f"This chat has reached the {limit}-question limit. Start a new chat."
     async with request.app.state.db.acquire() as connection:
+        asked = await connection.fetchval(
+            "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
+        )
+        if asked >= limit:
+            raise HTTPException(409, limit_message)
         previous = await connection.fetch(
             """SELECT question,result FROM (
                 SELECT question,result,created_at,id FROM chat_olap.messages
@@ -137,13 +155,23 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
         except PlannerUnavailable as error:
             raise HTTPException(503, str(error))
         async with request.app.state.db.acquire() as connection:
-            await connection.execute(
-                "INSERT INTO chat_olap.messages(id,session_id,question,result) VALUES($1,$2,$3,$4)",
-                uuid4(),
-                session_id,
-                body.question,
-                result,
-            )
+            async with connection.transaction():
+                # Re-check under a session lock: concurrent questions may have landed meanwhile.
+                await connection.execute(
+                    "SELECT 1 FROM chat_olap.sessions WHERE id=$1 FOR UPDATE", session_id
+                )
+                asked = await connection.fetchval(
+                    "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
+                )
+                if asked >= limit:
+                    raise HTTPException(409, limit_message)
+                await connection.execute(
+                    "INSERT INTO chat_olap.messages(id,session_id,question,result) VALUES($1,$2,$3,$4)",
+                    uuid4(),
+                    session_id,
+                    body.question,
+                    result,
+                )
         return result
 
     if not body.stream:
@@ -156,6 +184,8 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
             try:
                 result = await execute(queue.put)
                 await queue.put({"type": "result", "result": result})
+            except HTTPException as error:
+                await queue.put({"type": "error", "detail": error.detail})
             except Exception:
                 await queue.put({"type": "error", "detail": "Agent request failed. Please retry."})
 

@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     import_max_tables: int = Field(default=50, ge=1, le=100)
     import_max_columns: int = Field(default=128, ge=1, le=256)
     import_timeout_ms: int = Field(default=60000, ge=1000, le=300000)
-    max_imported_sources: int = Field(default=50, ge=1, le=500)
+    max_imported_sources: int = Field(default=2, ge=1, le=500)
+    max_chat_sessions: int = Field(default=10, ge=1, le=1000)
+    max_questions_per_session: int = Field(default=3, ge=1, le=200)
 
     @field_validator("analytics_database_url", mode="before")
     @classmethod
