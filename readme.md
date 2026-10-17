@@ -105,11 +105,11 @@ Compose provides a dedicated PostgreSQL 16 server for this project, with its own
 Set `DB_PASSWORD` to a URL-safe random value in `.env`. `DATABASE_URL` expands `DB_PASSWORD` and `POSTGRES_PORT` for host commands; Compose builds the internal API URL from the same password. Set `DOCKER_ANALYTICS_DATABASE_URL` only when analyzing a separate PostgreSQL source.
 
 ```bash
-docker compose up -d --wait postgres
 docker compose build
-docker compose run --rm api python -m scripts.migrate
 docker compose up -d
 ```
+
+The one-shot `migrate` service applies pending migrations before `api` starts.
 
 `docker compose down` preserves the database volume. `docker compose down -v` deletes this project's database data.
 
