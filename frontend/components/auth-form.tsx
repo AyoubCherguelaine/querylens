@@ -3,8 +3,14 @@ import { useState } from "react";
 import { ArrowRight, Database } from "lucide-react";
 import { api } from "@/lib/api";
 
-export function AuthForm({ onSuccess }: { onSuccess: () => void }) {
-  const [signup, setSignup] = useState(false),
+export function AuthForm({
+  onSuccess,
+  initialSignup = false,
+}: {
+  onSuccess: () => void;
+  initialSignup?: boolean;
+}) {
+  const [signup, setSignup] = useState(initialSignup),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   async function submit(event: React.FormEvent<HTMLFormElement>) {

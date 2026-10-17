@@ -54,13 +54,13 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open **http://localhost:3001**, create an account, and use **Data sources → Import data** or **Use this schema**. Select a source and table, inspect **Schema & measures**, and run **Count all rows** or **Profile data quality** without a model. Ask a natural-language question once the provider is configured. Expand **Inspect query & evidence** to review SQL, parameters, the interpreted plan, execution time, and caveats. Evidence can be downloaded as JSON.
+Open **http://localhost:3001** to see the public landing page and try the interactive demo without signing in. The demo calculates answers from a small local sample dataset using preset questions; it does not contact the backend or an AI provider. Choose **Get started** to create an account or **Sign in** to log in at `/login`. The authenticated app is at `/workspace`; use **Upload** or **Sources → Use this schema** to add data. Select a source and table, inspect **Schema & measures**, and run **Count all rows** or **Profile data quality** without a model. Ask a natural-language question once the provider is configured. Expand **Inspect query & evidence** to review SQL, parameters, the interpreted plan, execution time, and caveats. Evidence can be downloaded as JSON.
 
 API documentation: http://localhost:8001/docs. Liveness: `/health/live`; database readiness: `/health/ready`.
 
 ## Importing and reopening data
 
-The dashboard lists your saved sources, table counts, and imported row counts. **Explore source** reopens a saved schema. The **Active data source** selector changes the source, and the table list only shows that source’s cubes. Refreshing the browser returns to the dashboard; saved sources and chat histories remain in PostgreSQL.
+The dashboard lists your saved sources, table counts, and imported row counts. **Explore source** reopens a saved schema. The **Active schema** selector in the right sidebar changes the source, and the table list only shows that source’s cubes. Chat history lives in the left sidebar, and the navbar opens chat, sources, and uploads. Refreshing `/workspace` reopens the analysis view; saved sources and chat histories remain in PostgreSQL.
 
 1. Click **Import data** and choose or drag a `.csv`, `.db`, `.sqlite`, or `.sqlite3` file.
 2. Inspect normalized field names, inferred types, row counts, up to five sample rows (long cells truncated in preview), and SQLite key relationships.

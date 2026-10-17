@@ -6,9 +6,9 @@ import {
   ChevronRight,
   Database,
   FolderOpen,
-  History,
+  MessageSquare,
+  Upload,
   Layers3,
-  LogOut,
   Plus,
   RefreshCw,
   Sparkles,
@@ -25,12 +25,16 @@ import {
   type Source,
   type SourceOverview,
 } from "@/lib/api";
+import { ChatSidebar } from "./chat-sidebar";
+import { SchemaSidebar } from "./schema-sidebar";
+import { ImportData } from "./import-data";
 import { SourceDashboard } from "./source-dashboard";
-import { AuthForm } from "./auth-form";
+import { useRouter } from "next/navigation";
 import { AnalysisResult } from "./result";
 import { AgentSteps } from "./agent-steps";
 
 export function Workspace() {
+  const router = useRouter();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
     [cubes, setCubes] = useState<Cube[]>([]),
     [selected, setSelected] = useState(""),
@@ -41,7 +45,14 @@ export function Workspace() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [tab, setTab] = useState<"analysis" | "schema">("analysis");
-  const [view, setView] = useState<"dashboard" | "analysis">("dashboard");
+  const [view, setView] = useState<"dashboard" | "analysis" | "upload">(
+    "analysis",
+  );
+  const [loadingData, setLoadingData] = useState(true);
+  const [pendingQuestion, setPendingQuestion] = useState("");
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
+  const conversation = useRef<HTMLDivElement>(null);
   const [selectedSource, setSelectedSource] = useState("");
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [overview, setOverview] = useState<SourceOverview>({
@@ -59,7 +70,6 @@ export function Workspace() {
     (source) => source.id === selectedSource,
   );
   const sourceCubes = cubes.filter((c) => c.source_id === selectedSource);
-  const end = useRef<HTMLDivElement>(null);
   const cube = cubes.find((c) => c.id === selected);
   const importedTable = activeSource?.manifest.tables?.find(
     (table) => table.name === cube?.definition.table,
@@ -71,20 +81,34 @@ export function Workspace() {
         name !== "id",
     ) || cube?.definition.dimensions[0];
   async function load() {
-    const [list, history, sourceData] = await Promise.all([
-      api<Cube[]>("cubes"),
-      api<Session[]>("chat/sessions"),
-      api<SourceOverview>("sources"),
-    ]);
-    setCubes(list);
-    setOverview(sourceData);
-    setSessions(history);
-    setSelected((previous) =>
-      list.some((c) => c.id === previous) ? previous : "",
-    );
-    return { cubes: list, sources: sourceData.sources };
+    setLoadingData(true);
+    try {
+      const [list, history, sourceData] = await Promise.all([
+        api<Cube[]>("cubes"),
+        api<Session[]>("chat/sessions"),
+        api<SourceOverview>("sources"),
+      ]);
+      setCubes(list);
+      setOverview(sourceData);
+      const sourceId = sourceData.sources.some(
+        (source) => source.id === selectedSource,
+      )
+        ? selectedSource
+        : list[0]?.source_id || sourceData.sources[0]?.id || "";
+      setSelectedSource(sourceId);
+      setSessions(history);
+      setSelected((previous) =>
+        list.some((c) => c.id === previous && c.source_id === sourceId)
+          ? previous
+          : list.find((c) => c.source_id === sourceId)?.id || "",
+      );
+      return { cubes: list, sources: sourceData.sources };
+    } finally {
+      setLoadingData(false);
+    }
   }
   function openSource(id: string, availableCubes = cubes) {
+    setRightOpen(false);
     setSelectedSource(id);
     setSelected(availableCubes.find((c) => c.source_id === id)?.id || "");
     setSession("");
@@ -104,12 +128,64 @@ export function Workspace() {
         setAuthenticated(true);
         void load().catch((error) => setError((error as Error).message));
       })
-      .catch(() => setAuthenticated(false));
+      .catch(() => {
+        setAuthenticated(false);
+        router.replace("/login");
+      });
   }, []);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth" });
+    const panel = conversation.current;
+    if (panel) panel.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
   }, [messages, busy, agentSteps]);
+  useEffect(() => {
+    const resetDrawers = () => {
+      setLeftOpen(false);
+      setRightOpen(false);
+    };
+    window.addEventListener("resize", resetDrawers);
+    return () => window.removeEventListener("resize", resetDrawers);
+  }, []);
+  useEffect(() => {
+    if (!leftOpen && !rightOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = document.getElementById(
+      leftOpen ? "chat-sidebar" : "schema-sidebar",
+    );
+    const focusable = () =>
+      Array.from(
+        panel?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input, select:not(:disabled), [tabindex="0"]',
+        ) || [],
+      ).filter((element) => element.getClientRects().length > 0);
+    focusable()[0]?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setLeftOpen(false);
+        setRightOpen(false);
+      }
+      if (event.key === "Tab") {
+        const elements = focusable();
+        const first = elements[0],
+          last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previous?.focus();
+    };
+  }, [leftOpen, rightOpen]);
   function choose(id: string) {
+    setRightOpen(false);
+    setLeftOpen(false);
+    setTab("analysis");
     setView("analysis");
     setSelectedSource(
       cubes.find((c) => c.id === id)?.source_id || selectedSource,
@@ -140,6 +216,8 @@ export function Workspace() {
       const history = await api<{ messages: Message[] }>(
         `chat/session/${item.id}`,
       );
+      setLeftOpen(false);
+      setQuestion("");
       setSelected(item.cube_id);
       setSelectedSource(
         cubes.find((c) => c.id === item.cube_id)?.source_id || "",
@@ -161,6 +239,7 @@ export function Workspace() {
     setAgentSteps([]);
     setError("");
     const text = question.trim();
+    setPendingQuestion(text);
     try {
       let id = session;
       if (!id) {
@@ -174,7 +253,7 @@ export function Workspace() {
         setAgentSteps((previous) => {
           const found = previous.some((item) => item.id === step.id);
           return found
-            ? previous.map((item) => item.id === step.id ? step : item)
+            ? previous.map((item) => (item.id === step.id ? step : item))
             : [...previous, step];
         });
       });
@@ -188,6 +267,7 @@ export function Workspace() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setPendingQuestion("");
       setBusy(false);
     }
   }
@@ -239,6 +319,31 @@ export function Workspace() {
       setBusy(false);
     }
   }
+  async function signOut() {
+    try {
+      await api("logout", {});
+      setAuthenticated(false);
+      router.replace("/");
+      setMessages([]);
+      setSession("");
+      setCubes([]);
+      setSelected("");
+      setQuestion("");
+      setOverview((previous) => ({
+        ...previous,
+        sources: [],
+        available_schemas: [],
+      }));
+      setSelectedSource("");
+      setView("dashboard");
+
+      setLeftOpen(false);
+      setRightOpen(false);
+      setError("");
+    } catch (error) {
+      setError((error as Error).message);
+    }
+  }
   if (authenticated === null)
     return (
       <main className="loading-screen" role="status">
@@ -247,161 +352,129 @@ export function Workspace() {
     );
   if (!authenticated)
     return (
-      <AuthForm
-        onSuccess={() => {
-          setAuthenticated(true);
-          load().catch((e) => setError(e.message));
-        }}
-      />
+      <main className="loading-screen" role="status">
+        Opening sign in…
+      </main>
     );
   return (
     <div className="workspace">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">
-            <Database size={19} />
-          </span>
-          cube<span className="muted">/</span>chat
-        </div>
-        <div className="workspace-label">
-          <span className="workspace-avatar">A</span>
-          <div>
-            Analytics workspace<small>PostgreSQL explorer</small>
-          </div>
-        </div>
-        <div className="section-label">WORKSPACE</div>
+      {(leftOpen || rightOpen) && (
         <button
-          className={`nav-item dashboard-nav ${view === "dashboard" ? "active" : ""}`}
-          disabled={busy}
+          className="panel-backdrop"
+          tabIndex={-1}
+          aria-label="Close sidebar"
           onClick={() => {
-            setView("dashboard");
-            setError("");
+            setLeftOpen(false);
+            setRightOpen(false);
           }}
-        >
-          <FolderOpen size={18} />
-          Data sources<span>{overview.sources.length}</span>
-        </button>
-        <button
-          className={`nav-item ${view === "analysis" ? "active" : ""}`}
-          disabled={busy || !selectedSource}
-          onClick={() => {
-            setView("analysis");
-            setTab("analysis");
-          }}
-        >
-          <Layers3 size={18} />
-          Cube explorer<span>{sourceCubes.length}</span>
-        </button>
-        <label className="source-selector">
-          ACTIVE SOURCE
-          <select
-            aria-label="Active data source"
-            value={selectedSource}
-            disabled={busy}
-            onChange={(e) =>
-              e.target.value ? openSource(e.target.value) : setView("dashboard")
-            }
-          >
-            <option value="">Choose a source</option>
-            {overview.sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.schema_name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="section-label cube-label">
-          SOURCE TABLES
-          <button
-            className="icon-button"
-            title="Discover cubes"
-            disabled={busy}
-            onClick={discover}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-        <div className="cube-list">
-          {sourceCubes.map((c) => (
-            <button
-              key={c.id}
-              disabled={busy}
-              className={`cube-item ${selected === c.id ? "selected" : ""}`}
-              onClick={() => choose(c.id)}
-            >
-              <Box size={16} />
-              <span>
-                {c.definition.name}
-                <small>
-                  {c.definition.schema}.{c.definition.table}
-                </small>
-              </span>
-              {selected === c.id && <ChevronRight size={14} />}
-            </button>
-          ))}
-          {!sourceCubes.length && (
-            <p className="sidebar-hint">
-              Choose a source from the dashboard to explore its tables.
-            </p>
-          )}
-        </div>
-        <div className="section-label">
-          <History size={13} /> RECENT ANALYSES
-        </div>
-        <div className="session-list">
-          {sessions.slice(0, 8).map((s) => (
-            <button disabled={busy} key={s.id} onClick={() => openSession(s)}>
-              {cubes.find((c) => c.id === s.cube_id)?.definition.name ||
-                "Analysis"}
-              <small>{new Date(s.created_at).toLocaleDateString()}</small>
-            </button>
-          ))}
-        </div>
-        <div className="sidebar-bottom">
-          <span>
-            <span className="dot" /> PostgreSQL source
-          </span>
-          <button
-            className="icon-button"
-            aria-label="Sign out"
-            disabled={busy}
-            onClick={async () => {
-              await api("logout", {});
-              setAuthenticated(false);
-              setMessages([]);
-              setSession("");
-              setCubes([]);
-              setSelected("");
-              setQuestion("");
-              setOverview((previous) => ({
-                ...previous,
-                sources: [],
-                available_schemas: [],
-              }));
-              setSelectedSource("");
-              setView("dashboard");
-            }}
-          >
-            <LogOut size={17} />
-          </button>
-        </div>
-      </aside>
-      <main className="main-panel">
+        />
+      )}
+      <ChatSidebar
+        leftOpen={leftOpen}
+        rightOpen={rightOpen}
+        busy={busy}
+        cubes={cubes}
+        sessions={sessions}
+        session={session}
+        onClose={() => setLeftOpen(false)}
+        onNewChat={() => choose(selected)}
+        onOpenSession={openSession}
+        onSignOut={signOut}
+      />
+      <main className="main-panel" inert={leftOpen || rightOpen}>
         <header className="topbar">
-          <span>
-            Workspace <ChevronRight size={14} />{" "}
+          <div className="workspace-crumb">
+            <button
+              className="icon-button mobile-toggle"
+              aria-label="Open chats"
+              aria-expanded={leftOpen}
+              aria-controls="chat-sidebar"
+              onClick={() => {
+                setLeftOpen(!leftOpen);
+                setRightOpen(false);
+              }}
+            >
+              <MessageSquare size={19} />
+            </button>
+            <span className="desktop-crumb">
+              Workspace <ChevronRight size={14} />
+            </span>
             <strong>
               {view === "dashboard"
                 ? "Data sources"
-                : activeSource?.schema_name || "Cube explorer"}
+                : view === "upload"
+                  ? "Upload data"
+                  : "Analysis"}
             </strong>
-          </span>
-          <span className="source-badge">
-            <span className="dot" /> PostgreSQL
-          </span>
+          </div>
+          <nav className="workspace-nav" aria-label="Workspace navigation">
+            <button
+              className={view === "analysis" ? "active" : ""}
+              aria-current={view === "analysis" ? "page" : undefined}
+              disabled={busy}
+              onClick={() => {
+                setView("analysis");
+                setTab("analysis");
+              }}
+            >
+              <Sparkles size={15} />
+              <span>Chat</span>
+            </button>
+            <button
+              className={view === "dashboard" ? "active" : ""}
+              aria-current={view === "dashboard" ? "page" : undefined}
+              disabled={busy}
+              onClick={() => {
+                setView("dashboard");
+                setError("");
+              }}
+            >
+              <FolderOpen size={15} />
+              <span>Sources</span>
+            </button>
+            <button
+              className={view === "upload" ? "active" : ""}
+              aria-current={view === "upload" ? "page" : undefined}
+              disabled={busy}
+              onClick={() => {
+                setView("upload");
+                setError("");
+              }}
+            >
+              <Upload size={15} />
+              <span>Upload</span>
+            </button>
+          </nav>
+          <button
+            className="schema-toggle secondary"
+            aria-label="Open schemas"
+            aria-expanded={rightOpen}
+            aria-controls="schema-sidebar"
+            onClick={() => {
+              setRightOpen(!rightOpen);
+              setLeftOpen(false);
+            }}
+          >
+            <Database size={16} />
+            <span>Schemas</span>
+          </button>
         </header>
-        <div className="page-content">
-          {view === "dashboard" ? (
+        <div
+          className={`page-content ${view === "analysis" ? "analysis-content" : ""}`}
+        >
+          {loadingData ? (
+            <div className="workspace-loading" role="status">
+              <RefreshCw size={24} className="spin" />
+              <h2>Preparing your workspace</h2>
+              <p>Loading your schemas and conversations…</p>
+            </div>
+          ) : view === "upload" ? (
+            <ImportData
+              limits={overview.limits}
+              onCancel={() => setView("dashboard")}
+              onComplete={sourceComplete}
+            />
+          ) : view === "dashboard" ? (
             <>
               {error && (
                 <p className="error" role="alert">
@@ -422,10 +495,11 @@ export function Workspace() {
               <div className="page-heading">
                 <div>
                   <span className="eyebrow">EXPLORE WITH CONFIDENCE</span>
-                  <h1>Your data, in perspective.</h1>
+                  <h1>Let’s find your next insight.</h1>
                   <p className="muted">
-                    Source: {activeSource?.schema_name}. Choose a table and
-                    follow the evidence.
+                    {activeSource
+                      ? `Exploring ${activeSource.schema_name}. Ask a question and follow the evidence.`
+                      : "Connect a source, choose a table, and start a conversation."}
                   </p>
                 </div>
                 <button
@@ -440,17 +514,25 @@ export function Workspace() {
               {!cube ? (
                 <section className="empty-card">
                   <Database size={38} />
-                  <h2>No tables are available in this source</h2>
+                  <h2>
+                    {selectedSource
+                      ? "No tables are available in this source"
+                      : "Good questions start with your data."}
+                  </h2>
                   <p>
-                    Refresh the source to discover its current tables, or open
-                    the data source dashboard to import another dataset.
+                    {selectedSource
+                      ? "Discover tables in this source, or choose another schema in the right sidebar."
+                      : "Upload a dataset or connect a PostgreSQL schema to start exploring. Your chats live on the left, and your schemas on the right."}
                   </p>
                   <button
                     className="primary"
-                    onClick={discover}
+                    onClick={() =>
+                      selectedSource ? void discover() : setView("upload")
+                    }
                     disabled={busy}
                   >
-                    Discover cubes <ArrowUp size={16} />
+                    {selectedSource ? "Discover tables" : "Upload your data"}{" "}
+                    <ArrowUp size={16} />
                   </button>
                   {error && (
                     <p className="error" role="alert">
@@ -471,7 +553,11 @@ export function Workspace() {
                           {cube.definition.schema}.{cube.definition.table}
                         </p>
                       </div>
-                      <span className="tag">{cube.definition.kind ? `${cube.definition.kind} cube` : "Source cube"}</span>
+                      <span className="tag">
+                        {cube.definition.kind
+                          ? `${cube.definition.kind} cube`
+                          : "Source cube"}
+                      </span>
                     </div>
                     <div className="cube-stats">
                       <div>
@@ -536,10 +622,14 @@ export function Workspace() {
                       {!!cube.definition.joins?.length && (
                         <div className="source-relationships">
                           <h3>Related dimensions</h3>
-                          <p className="muted">These declared relationships preserve this cube’s grain. Related amounts stay in their own cubes.</p>
+                          <p className="muted">
+                            These declared relationships preserve this cube’s
+                            grain. Related amounts stay in their own cubes.
+                          </p>
                           {cube.definition.joins.map((join) => (
                             <p className="relationship" key={join.path}>
-                              <strong>{join.path}</strong> → {join.schema}.{join.table} · many to one
+                              <strong>{join.path}</strong> → {join.schema}.
+                              {join.table} · many to one
                             </p>
                           ))}
                         </div>
@@ -561,7 +651,10 @@ export function Workspace() {
                                 <td>
                                   <code>{f.type}</code>
                                 </td>
-                                <td>{f.role?.replaceAll("_", " ") || (f.key ? "identifier" : "dimension")}</td>
+                                <td>
+                                  {f.role?.replaceAll("_", " ") ||
+                                    (f.key ? "identifier" : "dimension")}
+                                </td>
                                 <td>{f.nullable ? "Yes" : "No"}</td>
                               </tr>
                             ))}
@@ -581,7 +674,8 @@ export function Workspace() {
                           <h3>Imported relationships</h3>
                           <p className="muted">
                             These keys are preserved in PostgreSQL and used to
-                            model related dimensions when they preserve the cube’s grain.
+                            model related dimensions when they preserve the
+                            cube’s grain.
                           </p>
                           {importedTable.foreign_keys.map((key, index) => (
                             <p className="relationship" key={index}>
@@ -594,12 +688,21 @@ export function Workspace() {
                       {!!cube.definition.suggested_questions?.length && (
                         <div>
                           <h3>Explore this model</h3>
-                          {cube.definition.suggested_questions.map((suggestion) => (
-                            <button className="secondary" key={suggestion} disabled={busy}
-                              onClick={() => { setQuestion(suggestion); setTab("analysis"); }}>
-                              {suggestion}
-                            </button>
-                          ))}
+                          {cube.definition.suggested_questions.map(
+                            (suggestion) => (
+                              <button
+                                className="secondary"
+                                key={suggestion}
+                                disabled={busy}
+                                onClick={() => {
+                                  setQuestion(suggestion);
+                                  setTab("analysis");
+                                }}
+                              >
+                                {suggestion}
+                              </button>
+                            ),
+                          )}
                         </div>
                       )}
                       {cube.definition.warnings.map((w) => (
@@ -610,8 +713,8 @@ export function Workspace() {
                     </section>
                   ) : (
                     <section className="analysis-panel">
-                      <div className="conversation">
-                        {!messages.length ? (
+                      <div className="conversation" ref={conversation}>
+                        {!messages.length && !pendingQuestion ? (
                           <div className="conversation-empty">
                             <span className="sparkle">
                               <Sparkles size={26} />
@@ -625,13 +728,20 @@ export function Workspace() {
                               source evidence.
                             </p>
                             <div className="suggestions">
-                              <button disabled={busy} onClick={() => setQuestion(
-                                "Write a readable analysis of this source: summarize the main findings, explain useful comparisons, and state data limitations."
-                              )}>
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  setQuestion(
+                                    "Write a readable analysis of this source: summarize the main findings, explain useful comparisons, and state data limitations.",
+                                  )
+                                }
+                              >
                                 <Sparkles size={17} />
                                 <span>
                                   Write an analysis
-                                  <small>Turn data into a readable report</small>
+                                  <small>
+                                    Turn data into a readable report
+                                  </small>
                                 </span>
                                 <ChevronRight size={16} />
                               </button>
@@ -645,6 +755,7 @@ export function Workspace() {
                               </button>
                               {suggestedDimension && (
                                 <button
+                                  disabled={busy}
                                   onClick={() =>
                                     setQuestion(
                                       `Count rows by ${suggestedDimension}`,
@@ -672,13 +783,18 @@ export function Workspace() {
                             </div>
                           ))
                         )}
+                        {pendingQuestion && (
+                          <div className="question pending-question">
+                            <span className="user-avatar">You</span>
+                            <p>{pendingQuestion}</p>
+                          </div>
+                        )}
                         {busy && (
                           <div role="status" className="working">
                             <span className="dot" /> Working on your analysis…
                           </div>
                         )}
                         <AgentSteps steps={agentSteps} />
-                        <div ref={end} />
                       </div>
                       <div className="composer-wrap">
                         {error && (
@@ -699,7 +815,11 @@ export function Workspace() {
                             placeholder={`Ask a question about ${cube.definition.name.toLowerCase()}…`}
                             rows={2}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
+                              if (
+                                e.key === "Enter" &&
+                                !e.shiftKey &&
+                                !e.nativeEvent.isComposing
+                              ) {
                                 e.preventDefault();
                                 e.currentTarget.form?.requestSubmit();
                               }
@@ -733,6 +853,26 @@ export function Workspace() {
           )}
         </div>
       </main>
+      <SchemaSidebar
+        key={selectedSource}
+        leftOpen={leftOpen}
+        rightOpen={rightOpen}
+        busy={busy}
+        overview={overview}
+        selectedSource={selectedSource}
+        sourceCubes={sourceCubes}
+        selected={selected}
+        cube={cube}
+        onClose={() => setRightOpen(false)}
+        onSourceChange={openSource}
+        onChooseTable={choose}
+        onDiscover={discover}
+        onViewSchema={() => {
+          setView("analysis");
+          setTab("schema");
+        }}
+        onUpload={() => setView("upload")}
+      />
     </div>
   );
 }

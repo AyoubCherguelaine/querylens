@@ -1,0 +1,150 @@
+"use client";
+import { useState } from "react";
+import {
+  Database,
+  X,
+  Plus,
+  Search,
+  History,
+  MessageSquare,
+  LogOut,
+} from "lucide-react";
+import type { Cube, Session } from "@/lib/api";
+
+export function ChatSidebar({
+  leftOpen,
+  rightOpen,
+  busy,
+  cubes,
+  sessions,
+  session,
+  onClose,
+  onNewChat,
+  onOpenSession,
+  onSignOut,
+}: {
+  leftOpen: boolean;
+  rightOpen: boolean;
+  busy: boolean;
+  cubes: Cube[];
+  sessions: Session[];
+  session: string;
+  onClose: () => void;
+  onNewChat: () => void;
+  onOpenSession: (session: Session) => void;
+  onSignOut: () => void;
+}) {
+  const [chatSearch, setChatSearch] = useState("");
+  return (
+    <aside
+      id="chat-sidebar"
+      className={`sidebar chat-sidebar ${leftOpen ? "is-open" : ""}`}
+      aria-label="Chats"
+      role={leftOpen ? "dialog" : undefined}
+      aria-modal={leftOpen || undefined}
+      inert={rightOpen}
+    >
+      <div className="brand">
+        <span className="brand-mark">
+          <Database size={19} />
+        </span>
+        cube<span className="muted">/</span>chat
+        <button
+          className="icon-button drawer-close"
+          aria-label="Close chats"
+          onClick={() => onClose()}
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="workspace-label">
+        <span className="workspace-avatar">A</span>
+        <div>
+          Analytics workspace<small>Your data. Your perspective.</small>
+        </div>
+      </div>
+      <button
+        className="primary new-chat"
+        disabled={busy}
+        onClick={() => onNewChat()}
+      >
+        <Plus size={17} /> New chat
+      </button>
+      <label className="sidebar-search">
+        <Search size={15} />
+        <input
+          aria-label="Search chats"
+          placeholder="Search chats…"
+          value={chatSearch}
+          onChange={(e) => setChatSearch(e.target.value)}
+        />
+      </label>
+      <div className="section-label">
+        <History size={13} /> CHAT HISTORY <span>{sessions.length}</span>
+      </div>
+      <div className="session-list">
+        {sessions
+          .filter((item) =>
+            (
+              cubes.find((c) => c.id === item.cube_id)?.definition.name ||
+              "Analysis"
+            )
+              .toLowerCase()
+              .includes(chatSearch.toLowerCase()),
+          )
+          .map((item) => (
+            <button
+              className={session === item.id ? "active" : ""}
+              aria-current={session === item.id ? "page" : undefined}
+              disabled={busy}
+              key={item.id}
+              onClick={() => onOpenSession(item)}
+            >
+              <MessageSquare size={16} />
+              <span>
+                {cubes.find((c) => c.id === item.cube_id)?.definition.name ||
+                  "Analysis"}
+                <small>
+                  {new Date(item.created_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </small>
+              </span>
+            </button>
+          ))}
+        {!sessions.length && (
+          <div className="history-empty">
+            <MessageSquare size={25} />
+            <p>A little curiosity goes a long way.</p>
+            <small>
+              Your conversations will appear here after you ask a question.
+            </small>
+          </div>
+        )}
+        {!!sessions.length &&
+          !sessions.some((item) =>
+            (
+              cubes.find((c) => c.id === item.cube_id)?.definition.name ||
+              "Analysis"
+            )
+              .toLowerCase()
+              .includes(chatSearch.toLowerCase()),
+          ) && <p className="sidebar-hint">No chats match your search.</p>}
+      </div>
+      <div className="sidebar-bottom">
+        <span>
+          <span className="dot" /> PostgreSQL source
+        </span>
+        <button
+          className="icon-button"
+          aria-label="Sign out"
+          disabled={busy}
+          onClick={onSignOut}
+        >
+          <LogOut size={17} />
+        </button>
+      </div>
+    </aside>
+  );
+}
