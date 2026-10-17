@@ -315,3 +315,45 @@ def test_agent_stream_tools_history_and_source_scope(client, monkeypatch):
     assert context["history"][0]["queries"][-1]["result"]["rows"] == [{"total": "60.6006"}]
     saved = client.get(f"/chat/session/{session}", headers=headers).json()["messages"]
     assert len(saved) == 2 and saved[0]["result"]["steps"] == result["steps"]
+
+
+def test_written_analysis_persists_and_supports_followup(client, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    from pydantic import SecretStr
+
+    from tests.test_chat_agent import response
+    from tests.test_narrative import draft
+
+    headers = account(client)
+    cube_id = discover(client, headers)
+    session = client.post("/chat/session", headers=headers, json={"cube_id": cube_id}).json()["id"]
+    client.app.state.settings.openai_api_key = SecretStr("test-key")
+    provider = AsyncMock()
+    provider.__aenter__.return_value = provider
+    report = draft(["call-0"])
+    report["summary"] = "Total sales are 60.6006."
+    report["sections"] = [{"heading": "Sales", "text": "Recorded sales total 60.6006."}]
+    rewrite = {**report, "evidence_ids": ["history-0-query-0"]}
+    provider.responses.create.side_effect = [
+        response(
+            "query_postgres",
+            {"sql": "SELECT sum(amount) AS total FROM business.sales", "purpose": "Total sales"},
+            0,
+        ),
+        response("write_analysis", report, 1),
+        response("write_analysis", rewrite, 2),
+    ]
+    monkeypatch.setattr("backend.services.chat_agent.AsyncOpenAI", lambda **kw: provider)
+    endpoint = f"/chat/session/{session}/messages"
+    streamed = client.post(
+        endpoint, headers=headers, json={"question": "Write a report", "stream": True}
+    )
+    result = json.loads(streamed.text.splitlines()[-1])["result"]
+    assert result["status"] == "answered"
+    assert result["report"]["evidence"][0]["rows"] == [{"total": "60.6006"}]
+    second = client.post(endpoint, headers=headers, json={"question": "Rewrite it for a manager"})
+    assert second.status_code == 200 and second.json()["report"]["summary"] == report["summary"]
+    stored = client.get(f"/chat/session/{session}", headers=headers).json()["messages"]
+    assert len(stored) == 2 and stored[0]["result"]["report"] == result["report"]

@@ -6,6 +6,8 @@ Chat uses a **conversational tool agent**. It receives the new question, the mos
 
 Python parses agent SQL with PostgreSQL's parser and permits one SELECT over fully qualified tables discovered in the selected source. Queries use read-only transactions, a restricted search path, a built-in analytics function/cast/operator allowlist, statement timeouts and bounded cursor fetching. Writes, application/system tables, other sources, row locking and arbitrary functions are rejected. Use derived subqueries instead of CTE references. Model answers still require review against the displayed evidence. The direct structured-plan analysis and profiling actions remain available without a model.
 
+For narrative output, ask “Write a readable analysis of this dataset” or “Turn those results into a summary for my manager,” or select **Write an analysis**. The agent can also choose narrative output when it helps explain findings. Its `write_analysis` tool returns a titled report with a summary, short sections and supporting query references. Reports appear directly in the conversation and can be downloaded as plain text. They persist with their evidence and can be rewritten in later turns without rerunning SQL. Unknown or failed query references are rejected; language-model interpretation and numerical claims still need review against the evidence. Samples and limited results retain their flags, and the writing instructions require material limitations and distinguish observations from interpretation.
+
 Source schemas, row samples and query results are sent to the configured model (`store=False`). Live tool results sent to the model include up to 20 rows; history includes up to five per query. The UI retains up to `MAX_RESULT_ROWS` per query, at most 128 columns, with cells clipped at 4,000 characters and truncation flagged.
 
 ## Local setup
@@ -130,6 +132,7 @@ backend/
     analysis.py              Query execution, profiling, result evidence
     chat_agent.py            Conversational tool loop, history and step events
     agent_sql.py             PostgreSQL AST validation and bounded SQL execution
+    narrative.py             Written report validation and supporting query references
     import_parser.py         Bounded CSV/SQLite parsing and type/key inspection
     sources.py               Source registry and atomic schema/table imports
 migrations/                  Versioned PostgreSQL DDL
@@ -198,7 +201,7 @@ Example body for `/cubes/{id}/analyze`:
 }
 ```
 
-Group aliases are `g0`, `g1`, … and metric aliases are `m0`, `m1`, …. If the agent needs more information, the chat endpoint returns `status: "clarification"`; the next user message continues the conversation. Agent results use `answered`, `clarification`, `error` or `limit_reached` and include `steps`. Streaming events are `step`, `heartbeat`, `result` or `error`. Missing provider configuration returns 503 before streaming; provider/time-limit failures during an agent run return an error result with partial evidence. Direct-plan validation returns 422 and timed-out direct analysis returns 504.
+Group aliases are `g0`, `g1`, … and metric aliases are `m0`, `m1`, …. If the agent needs more information, the chat endpoint returns `status: "clarification"`; the next user message continues the conversation. Agent results use `answered`, `clarification`, `error` or `limit_reached` and include `steps`. Failures include a safe `error` code and diagnostics distinguishing invalid provider requests, authentication/access issues, rate limits/quota, connection failures and timeouts. Logs retain provider status/code/parameter/request ID, without raw provider bodies or credentials. Streaming events are `step`, `heartbeat`, `result` or `error`. Missing provider configuration returns 503 before streaming; provider/time-limit failures during an agent run return an error result with partial evidence. Direct-plan validation returns 422 and timed-out direct analysis returns 504.
 
 ## Verification
 

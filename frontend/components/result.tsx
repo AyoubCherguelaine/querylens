@@ -1,6 +1,7 @@
 import { CheckCircle2, Download, Info } from "lucide-react";
 import type { Result } from "@/lib/api";
 import { AgentSteps } from "./agent-steps";
+import { WrittenAnalysis } from "./written-analysis";
 
 export function AnalysisResult({ result }: { result: Result }) {
   function download() {
@@ -31,7 +32,7 @@ export function AnalysisResult({ result }: { result: Result }) {
           <small>{result.duration_ms} ms</small>
         )}
       </div>
-      <p>{result.answer}</p>
+      {result.report ? <WrittenAnalysis report={result.report} /> : <p>{result.answer}</p>}
       <AgentSteps steps={result.steps || []} />
       {!!result.rows?.length && (
         <div className="table-scroll">
@@ -70,12 +71,15 @@ export function AnalysisResult({ result }: { result: Result }) {
         <>
           <div className="evidence">
             <details>
-              <summary>Inspect query & evidence</summary>
-              <pre>{result.sql}</pre>
-              <p>Parameters</p>
-              <pre>{JSON.stringify(result.parameters, null, 2)}</pre>
+              <summary>{result.sql ? "Inspect query & evidence" : "Inspect agent details"}</summary>
+              {result.sql && <>
+                <pre>{result.sql}</pre>
+                <p>Parameters</p>
+                <pre>{JSON.stringify(result.parameters, null, 2)}</pre>
+              </>}
+              {result.error && <pre>{JSON.stringify(result.error, null, 2)}</pre>}
               <p>
-                Executed{" "}
+                {result.sql ? "Executed" : "Finished"}{" "}
                 {result.executed_at
                   ? new Date(result.executed_at).toLocaleString()
                   : ""}

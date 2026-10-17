@@ -602,6 +602,16 @@ export function Workspace() {
                               source evidence.
                             </p>
                             <div className="suggestions">
+                              <button disabled={busy} onClick={() => setQuestion(
+                                "Write a readable analysis of this source: summarize the main findings, explain useful comparisons, and state data limitations."
+                              )}>
+                                <Sparkles size={17} />
+                                <span>
+                                  Write an analysis
+                                  <small>Turn data into a readable report</small>
+                                </span>
+                                <ChevronRight size={16} />
+                              </button>
                               <button disabled={busy} onClick={countRows}>
                                 <Table2 size={17} />
                                 <span>

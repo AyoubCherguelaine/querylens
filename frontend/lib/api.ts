@@ -22,10 +22,26 @@ export type AgentStep = {
   output?: Record<string, unknown>;
   duration_ms?: number;
 };
+export type WrittenReport = {
+  title: string;
+  summary: string;
+  sections: { heading: string; text: string }[];
+  evidence: {
+    id: string;
+    sql: string;
+    row_count?: number;
+    truncated?: boolean;
+    cells_truncated?: boolean;
+    sample_only?: boolean;
+    executed_at?: string;
+  }[];
+};
 export type Result = {
   status: "answered" | "clarification" | "error" | "limit_reached";
   steps?: AgentStep[];
   answer: string;
+  report?: WrittenReport;
+  error?: { error: string; code: string; diagnostics?: Record<string, unknown> };
   rows?: Record<string, unknown>[];
   columns?: { key: string; label: string }[];
   sql?: string;

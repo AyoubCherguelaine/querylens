@@ -3,9 +3,11 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from copy import deepcopy
 from datetime import datetime, timezone
+from hashlib import sha256
 
 import asyncpg
 from openai import AsyncOpenAI, OpenAIError
@@ -13,6 +15,7 @@ from openai import AsyncOpenAI, OpenAIError
 from backend.services.agent_sql import FUNCTIONS, query_source
 from backend.services.catalog import discover
 from backend.services.compiler import quote
+from backend.services.narrative import query_evidence, write_analysis
 from backend.services.planner import PlannerUnavailable
 
 logger = logging.getLogger(__name__)
@@ -27,6 +30,18 @@ Never invent results. Ground numerical claims in successful tool results and dis
 samples/truncated results from full results. Re-query when historical results may be stale.
 If the question is ambiguous, call ask_user. Stop and wait for the user's next message.
 Use finish with a clear answer when done, including material assumptions and limits.
+When the user requests a report, written analysis, executive summary or other human text,
+or a narrative would make analytical findings clearer, use write_analysis as the final response.
+Write natural, specific prose in the user's language. Explain what the data shows and why
+it matters. Separate observed findings, possible interpretations and suggested next steps.
+Do not invent causes, trends, business definitions or recommendations unsupported by data.
+Use short paragraphs and descriptive headings; avoid raw JSON, SQL or Markdown in the prose.
+Include limitations when samples, clipped cells, missing values or truncated results matter.
+Do not extrapolate totals from samples or average across different currencies without conversion.
+Copy the evidence_id returned by each successful query tool (or history evidence_ids)
+into write_analysis.evidence_ids. Do not invent or abbreviate those IDs.
+You may reuse historical evidence for a writing-only follow-up; state its age when relevant.
+If evidence is missing, query it first or ask the user. Empty results can support a no-data report.
 Tool purpose strings are short public action descriptions; do not include private reasoning.
 """
 
@@ -71,13 +86,37 @@ TOOLS = [
         {"question": STRING},
     ),
     function(
+        "write_analysis",
+        "Deliver human-readable analysis, a report or executive summary grounded in successful "
+        "queries. This completes the turn. Cite query call IDs or history evidence_ids.",
+        {
+            "title": STRING,
+            "summary": STRING,
+            "sections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"heading": STRING, "text": STRING},
+                    "required": ["heading", "text"],
+                    "additionalProperties": False,
+                },
+            },
+            "evidence_ids": {"type": "array", "items": STRING},
+        },
+    ),
+    function(
         "finish", "Deliver the final answer grounded in observed query results.", {"answer": STRING}
     ),
 ]
 
 
 def table_ref(definition):
-    return f"{quote(definition['schema'])}.{quote(definition['table'])}"
+    # Tool enum labels must not contain quoted SQL identifiers. SQL itself is
+    # still built exclusively from discovered, safely quoted table/column names.
+    parts = (definition["schema"], definition["table"])
+    if all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", part) for part in parts):
+        return ".".join(parts)
+    return "table_" + sha256(json.dumps(parts).encode()).hexdigest()[:16]
 
 
 def sampling_tools(definitions):
@@ -95,7 +134,15 @@ def resolve_sample_table(definitions, reference):
     """Resolve only known source tables; never interpolate a supplied identifier."""
     if isinstance(reference, str):
         reference = reference.strip()
-        exact = [d for d in definitions if reference == table_ref(d)]
+        exact = [
+            d
+            for d in definitions
+            if reference
+            in {
+                table_ref(d),
+                f"{quote(d['schema'])}.{quote(d['table'])}",
+            }
+        ]
         if len(exact) == 1:
             return exact[0]
         matches = []
@@ -121,7 +168,7 @@ def resolve_sample_table(definitions, reference):
 def history_context(history):
     """Retain recent turns and every SQL attempt with bounded result samples."""
     result = []
-    for message in history:
+    for turn_index, message in enumerate(history):
         saved = message["result"]
         queries = []
         for step in saved.get("steps", []):
@@ -149,12 +196,24 @@ def history_context(history):
                 }
             ]
             queries[0]["rows"] = saved.get("rows", [])[:5]
+        if not queries and saved.get("report"):
+            queries = [
+                {**item, "rows": item.get("rows", [])[:5]}
+                for item in saved["report"].get("evidence", [])
+            ]
+        for query_index, query in enumerate(queries):
+            query["evidence_id"] = f"history-{turn_index}-query-{query_index}"
         result.append(
             {
                 "question": message["question"],
                 "answer": saved.get("answer", ""),
                 "status": saved.get("status"),
                 "queries": queries,
+                "report": (
+                    {"title": saved["report"]["title"], "sections": saved["report"]["sections"]}
+                    if saved.get("report")
+                    else None
+                ),
             }
         )
     # Bound history size by dropping complete oldest turns rather than cutting JSON.
@@ -167,6 +226,8 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
     if not settings.openai_api_key.get_secret_value():
         raise PlannerUnavailable("Configure OPENAI_API_KEY to use the conversational agent.")
     steps, last_query = [], {}
+    failure = {"error": "Request cancelled before completion.", "code": "cancelled"}
+    active_started = time.monotonic()
     started = time.monotonic()
 
     async def publish(step):
@@ -196,12 +257,13 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
         }
 
     async def loop():
-        nonlocal last_query
+        nonlocal last_query, active_started
         definitions = await discover(pool, settings, schemas=[cube["schema"]])
         tools = sampling_tools(definitions)
+        history_data = history_context(history)
         context = {
             "selected_table": {"schema": cube["schema"], "table": cube["table"]},
-            "history": history_context(history),
+            "history": history_data,
             "question": question,
             "history_window": "Most recent 30 turns; query samples contain at most 5 rows.",
         }
@@ -221,6 +283,7 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
                 }
                 steps.append(model_step)
                 await publish(model_step)
+                active_started = time.monotonic()
                 response = await client.responses.create(
                     model=settings.openai_model,
                     instructions=PROMPT,
@@ -238,7 +301,10 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
                 calls = [item for item in response.output if item.type == "function_call"]
                 if not calls:
                     messages.append(
-                        {"role": "user", "content": "Use finish or ask_user to respond."}
+                        {
+                            "role": "user",
+                            "content": "Use finish, write_analysis or ask_user to respond.",
+                        }
                     )
                     continue
                 for call in calls:
@@ -250,12 +316,25 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
                     step = {"id": call.call_id, "tool": call.name, "status": "running"}
                     steps.append(step)
                     tick = time.monotonic()
+                    active_started = tick
                     try:
                         args = json.loads(call.arguments)
                         if not isinstance(args, dict):
                             raise ValueError("Tool arguments must be an object.")
                         step.update(arguments=args, purpose=str(args.get("purpose", call.name)))
                         await publish(step)
+                        if call.name == "write_analysis":
+                            report = write_analysis(args, query_evidence(steps, history_data))
+                            step.update(
+                                status="completed",
+                                output={
+                                    "title": report["title"],
+                                    "evidence_ids": [item["id"] for item in report["evidence"]],
+                                },
+                                duration_ms=round((time.monotonic() - tick) * 1000),
+                            )
+                            await publish(step)
+                            return {**outcome("answered", report["summary"]), "report": report}
                         if call.name in {"finish", "ask_user"}:
                             field = "answer" if call.name == "finish" else "question"
                             answer = args.get(field)
@@ -282,6 +361,9 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
                             else:
                                 sql = args.get("sql")
                             output = await query_source(pool, settings, definitions, sql)
+                            output["evidence_id"] = call.call_id
+                            if call.name == "sample_table":
+                                output["sample_only"] = True
                             last_query = output
                         else:
                             raise ValueError("Unknown tool. Use a provided tool name.")
@@ -314,14 +396,36 @@ async def run_agent(pool, settings, cube, question, history, emit=None):
         async with asyncio.timeout(settings.agent_timeout_seconds):
             return await loop()
     except TimeoutError:
-        return outcome(
-            "error", "Agent time limit reached. Completed query evidence is shown below."
+        failure = {
+            "error": "Agent time limit reached. Narrow the request or increase AGENT_TIMEOUT_SECONDS.",
+            "code": "agent_timeout",
+        }
+        return {**outcome("error", failure["error"]), "error": failure}
+    except OpenAIError as error:
+        from backend.services.provider_errors import provider_failure
+
+        failure = provider_failure(error)
+        logger.warning(
+            "chat.agent_failed", extra={"step_count": len(steps), **failure["diagnostics"]}
         )
-    except (OpenAIError, asyncpg.PostgresError):
-        logger.warning("chat.agent_failed", extra={"step_count": len(steps)})
-        return outcome("error", "The model or source is unavailable. Retry your question.")
+        return {**outcome("error", failure["error"]), "error": failure}
+    except asyncpg.PostgresError as error:
+        failure = {
+            "error": "The source database is unavailable. Retry your question.",
+            "code": "source_unavailable",
+        }
+        logger.warning(
+            "chat.agent_failed",
+            extra={"step_count": len(steps), "error_type": type(error).__name__},
+        )
+        return {**outcome("error", failure["error"]), "error": failure}
     finally:
         for step in steps:
             if step["status"] == "running":
-                step.update(status="failed", output={"error": "Execution interrupted."})
+                step.update(
+                    status="failed",
+                    purpose="Execution failed",
+                    output=failure,
+                    duration_ms=round((time.monotonic() - active_started) * 1000),
+                )
                 await publish(step)

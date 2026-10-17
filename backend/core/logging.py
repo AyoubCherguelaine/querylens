@@ -24,6 +24,10 @@ class JsonFormatter(logging.Formatter):
             "tool",
             "step_id",
             "step_count",
+            "provider_status",
+            "provider_code",
+            "provider_param",
+            "provider_request_id",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

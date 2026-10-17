@@ -272,11 +272,13 @@ async def test_sampling_tools_use_discovered_references_and_log_status(monkeypat
         result = await run_agent(None, settings(), DEFINITIONS[0], "preview", [])
     assert result["status"] == "answered"
     assert query.call_args.args[-1] == 'SELECT "amount" FROM "sales"."orders" LIMIT 5'
+    sample_step = next(s for s in result["steps"] if s["tool"] == "sample_table")
+    assert sample_step["output"]["sample_only"] is True
     schema_step = next(s for s in result["steps"] if s["tool"] == "source_schema")
-    assert schema_step["output"]["tables"][0]["sample_table_ref"] == '"sales"."orders"'
+    assert schema_step["output"]["tables"][0]["sample_table_ref"] == "sales.orders"
     tools = client.responses.create.call_args.kwargs["tools"]
     sampling = next(t for t in tools if t["name"] == "sample_table")
-    assert sampling["parameters"]["properties"]["table"]["enum"] == ['"sales"."orders"']
+    assert sampling["parameters"]["properties"]["table"]["enum"] == ["sales.orders"]
     logged = [r for r in caplog.records if r.getMessage() == "chat.agent_step"]
     assert any(r.tool == "sample_table" and r.status == "completed" for r in logged)
     assert "Private purpose" not in caplog.text
