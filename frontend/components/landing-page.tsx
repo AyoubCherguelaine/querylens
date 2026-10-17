@@ -15,33 +15,46 @@ import {
   Upload,
 } from "lucide-react";
 import { ProductDemo } from "./product-demo";
+import { LanguageSwitch } from "@/lib/i18n/client";
+import { getDictionary } from "@/lib/i18n/server";
 
-export function LandingPage() {
+export async function LandingPage() {
+  const t = (await getDictionary()).landing;
+  const stepIcons = [Upload, MessageSquare, SearchCheck];
+  const featureIcons = [
+    MessageSquare,
+    GitBranch,
+    ChartNoAxesCombined,
+    SearchCheck,
+  ];
   return (
     <div className="landing-page">
       <a className="landing-skip" href="#main">
-        Skip to content
+        {t.skip}
       </a>
       <header className="landing-header">
-        <Link className="brand" href="/" aria-label="Cube Chat home">
+        <Link className="brand" href="/" aria-label={t.home}>
           <span className="brand-mark">
             <Database size={20} />
           </span>
-          cube<span className="muted">/</span>chat
+          <bdi className="brand-name" dir="ltr">
+            cube<span className="muted">/</span>chat
+          </bdi>
         </Link>
-        <nav aria-label="Main navigation">
-          <a href="#how-it-works">How it works</a>
-          <a href="#features">Features</a>
+        <nav aria-label={t.mainNav}>
+          <a href="#how-it-works">{t.howItWorks}</a>
+          <a href="#features">{t.features}</a>
           <a href="#demo">
-            Live demo <ArrowUpRight size={12} />
+            {t.liveDemo} <ArrowUpRight size={12} />
           </a>
         </nav>
         <div className="landing-account">
+          <LanguageSwitch />
           <Link href="/login" className="landing-sign-in">
-            Sign in
+            {t.signIn}
           </Link>
           <Link href="/login?mode=signup" className="primary">
-            Get started <ArrowRight size={15} />
+            {t.getStarted} <ArrowRight size={15} />
           </Link>
         </div>
       </header>
@@ -49,34 +62,32 @@ export function LandingPage() {
         <section className="landing-hero">
           <div className="landing-hero-copy">
             <span className="landing-kicker">
-              <span /> A clearer conversation with your data
+              <span /> {t.kicker}
             </span>
             <h1>
-              Your data has
-              <br />a story.
+              {t.heroLine1}
               <br />
-              <span>Ask it.</span>
+              {t.heroLine2}
+              <br />
+              <span>{t.heroAccent}</span>
             </h1>
-            <p>
-              Go from tables to understanding. Ask questions in plain language,
-              explore your schemas, and see the evidence behind every answer.
-            </p>
+            <p>{t.heroText}</p>
             <div className="landing-hero-actions">
               <Link className="primary" href="/login?mode=signup">
-                Start exploring <ArrowRight size={17} />
+                {t.startExploring} <ArrowRight size={17} />
               </Link>
               <a className="landing-demo-link" href="#demo">
                 <span>
                   <Play size={13} fill="currentColor" />
                 </span>
-                Try the live demo
+                {t.tryDemo}
               </a>
             </div>
             <div className="landing-hero-note">
-              <Check size={14} /> Bring your data. Keep the query in view.
+              <Check size={14} /> {t.heroNote}
             </div>
             <div className="landing-formats">
-              <span>WORKS WITH</span>
+              <span>{t.worksWith}</span>
               <div>
                 <span>
                   <Database size={16} /> PostgreSQL
@@ -93,121 +104,84 @@ export function LandingPage() {
           <div className="landing-preview">
             <div className="landing-preview-label">
               <span>
-                <Sparkles size={13} /> FROM QUESTION TO CLARITY
+                <Sparkles size={13} /> {t.previewLabel}
               </span>
-              <span>Try it yourself ↓</span>
+              <span>{t.tryIt}</span>
             </div>
             <ProductDemo />
             <div className="landing-preview-caption">
               <span>
-                <MessageSquare size={14} /> Questions on the left.
+                <MessageSquare size={14} /> {t.captionLeft}
               </span>
               <span>
-                <Database size={14} /> Context on the right.
+                <Database size={14} /> {t.captionRight}
               </span>
             </div>
           </div>
         </section>
         <section className="landing-workflow" id="how-it-works">
           <div className="landing-section-heading">
-            <span className="eyebrow">LESS SETUP. MORE UNDERSTANDING.</span>
-            <h2>From a dataset to a better question.</h2>
-            <p>
-              One workspace for your sources, conversations, and the details
-              that matter.
-            </p>
+            <span className="eyebrow">{t.workflowEyebrow}</span>
+            <h2>{t.workflowTitle}</h2>
+            <p>{t.workflowText}</p>
           </div>
           <div className="landing-steps">
-            {[
-              {
-                number: "01",
-                icon: Upload,
-                title: "Bring your data",
-                text: "Upload a CSV or SQLite file, or connect an available PostgreSQL schema. Keep related tables together.",
-              },
-              {
-                number: "02",
-                icon: MessageSquare,
-                title: "Start a conversation",
-                text: "Choose a table and ask what you want to understand. Follow up, compare dimensions, or request a written analysis.",
-              },
-              {
-                number: "03",
-                icon: SearchCheck,
-                title: "Follow the evidence",
-                text: "Inspect the executed SQL, query results, and source context. Understand where the answer comes from.",
-              },
-            ].map((step) => (
-              <article key={step.number}>
-                <div className="landing-step-top">
-                  <span>
-                    <step.icon size={21} />
-                  </span>
-                  <small>{step.number}</small>
-                </div>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
-              </article>
-            ))}
+            {t.steps
+              .map((text, index) => ({
+                ...text,
+                number: `0${index + 1}`,
+                icon: stepIcons[index],
+              }))
+              .map((step) => (
+                <article key={step.number}>
+                  <div className="landing-step-top">
+                    <span>
+                      <step.icon size={21} />
+                    </span>
+                    <small>{step.number}</small>
+                  </div>
+                  <h3>{step.title}</h3>
+                  <p>{step.text}</p>
+                </article>
+              ))}
           </div>
         </section>
         <section className="landing-features" id="features">
           <div className="landing-feature-intro">
-            <span className="eyebrow">THE FULL PICTURE, WITHIN REACH</span>
+            <span className="eyebrow">{t.featuresEyebrow}</span>
             <h2>
-              Curiosity in the center.
+              {t.featuresTitle1}
               <br />
-              Context all around.
+              {t.featuresTitle2}
             </h2>
-            <p>
-              Keep your questions, schemas, and answers together so you can stay
-              focused on what your data means.
-            </p>
+            <p>{t.featuresText}</p>
             <Link href="/login?mode=signup">
-              Find your next insight <ArrowRight size={16} />
+              {t.nextInsight} <ArrowRight size={16} />
             </Link>
           </div>
           <div className="landing-feature-grid">
-            {[
-              {
-                icon: MessageSquare,
-                title: "Pick up the conversation",
-                text: "Reopen saved chats and keep exploring from the questions you already asked.",
-              },
-              {
-                icon: GitBranch,
-                title: "Know your source",
-                text: "Browse tables, field types, dimensions, and declared relationships beside your analysis.",
-              },
-              {
-                icon: ChartNoAxesCombined,
-                title: "Go beyond a single number",
-                text: "Compare groups, inspect candidate measures, and turn findings into readable analysis.",
-              },
-              {
-                icon: SearchCheck,
-                title: "Make the answer inspectable",
-                text: "Review SQL and results alongside the response, with warnings and limitations where available.",
-              },
-            ].map((feature) => (
-              <article key={feature.title}>
-                <feature.icon size={20} />
-                <h3>{feature.title}</h3>
-                <p>{feature.text}</p>
-              </article>
-            ))}
+            {t.featureList
+              .map((text, index) => ({
+                ...text,
+                icon: featureIcons[index],
+              }))
+              .map((feature) => (
+                <article key={feature.title}>
+                  <feature.icon size={20} />
+                  <h3>{feature.title}</h3>
+                  <p>{feature.text}</p>
+                </article>
+              ))}
           </div>
         </section>
         <section className="landing-cta">
           <div>
-            <span className="eyebrow">
-              YOUR NEXT INSIGHT STARTS WITH A QUESTION
-            </span>
-            <h2>Meet your data where it lives.</h2>
-            <p>A workspace for the questions you haven’t asked yet.</p>
+            <span className="eyebrow">{t.ctaEyebrow}</span>
+            <h2>{t.ctaTitle}</h2>
+            <p>{t.ctaText}</p>
           </div>
           <Link className="primary" href="/login?mode=signup">
-            Create your workspace <ArrowRight size={17} />
+            {t.ctaButton} <ArrowRight size={17} />
           </Link>
         </section>
       </main>
@@ -215,11 +189,11 @@ export function LandingPage() {
         <Link className="brand" href="/">
           <Database size={19} /> cube / chat
         </Link>
-        <p>Good questions. Grounded answers.</p>
+        <p>{t.footerTagline}</p>
         <div>
-          <a href="#demo">Explore the demo</a>
+          <a href="#demo">{t.exploreDemo}</a>
           <Link href="/workspace">
-            Open workspace <ArrowUpRight size={13} />
+            {t.openWorkspace} <ArrowUpRight size={13} />
           </Link>
         </div>
       </footer>

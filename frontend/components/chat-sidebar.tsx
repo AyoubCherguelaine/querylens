@@ -10,6 +10,7 @@ import {
   LogOut,
 } from "lucide-react";
 import type { Cube, Session } from "@/lib/api";
+import { LanguageSwitch, useT } from "@/lib/i18n/client";
 
 export function ChatSidebar({
   leftOpen,
@@ -34,12 +35,14 @@ export function ChatSidebar({
   onOpenSession: (session: Session) => void;
   onSignOut: () => void;
 }) {
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.chats;
   const [chatSearch, setChatSearch] = useState("");
   return (
     <aside
       id="chat-sidebar"
       className={`sidebar chat-sidebar ${leftOpen ? "is-open" : ""}`}
-      aria-label="Chats"
+      aria-label={t.label}
       role={leftOpen ? "dialog" : undefined}
       aria-modal={leftOpen || undefined}
       inert={rightOpen}
@@ -48,10 +51,12 @@ export function ChatSidebar({
         <span className="brand-mark">
           <Database size={19} />
         </span>
-        cube<span className="muted">/</span>chat
+        <bdi className="brand-name" dir="ltr">
+          cube<span className="muted">/</span>chat
+        </bdi>
         <button
           className="icon-button drawer-close"
-          aria-label="Close chats"
+          aria-label={t.close}
           onClick={() => onClose()}
         >
           <X size={18} />
@@ -60,7 +65,8 @@ export function ChatSidebar({
       <div className="workspace-label">
         <span className="workspace-avatar">A</span>
         <div>
-          Analytics workspace<small>Your data. Your perspective.</small>
+          {t.workspace}
+          <small>{t.workspaceHint}</small>
         </div>
       </div>
       <button
@@ -68,26 +74,26 @@ export function ChatSidebar({
         disabled={busy}
         onClick={() => onNewChat()}
       >
-        <Plus size={17} /> New chat
+        <Plus size={17} /> {t.newChat}
       </button>
       <label className="sidebar-search">
         <Search size={15} />
         <input
-          aria-label="Search chats"
-          placeholder="Search chats…"
+          aria-label={t.search}
+          placeholder={t.searchPlaceholder}
           value={chatSearch}
           onChange={(e) => setChatSearch(e.target.value)}
         />
       </label>
       <div className="section-label">
-        <History size={13} /> CHAT HISTORY <span>{sessions.length}</span>
+        <History size={13} /> {t.history} <span>{sessions.length}</span>
       </div>
       <div className="session-list">
         {sessions
           .filter((item) =>
             (
               cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-              "Analysis"
+              t.fallbackName
             )
               .toLowerCase()
               .includes(chatSearch.toLowerCase()),
@@ -103,9 +109,9 @@ export function ChatSidebar({
               <MessageSquare size={16} />
               <span>
                 {cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-                  "Analysis"}
+                  t.fallbackName}
                 <small>
-                  {new Date(item.created_at).toLocaleDateString(undefined, {
+                  {new Date(item.created_at).toLocaleDateString(intl, {
                     month: "short",
                     day: "numeric",
                   })}
@@ -116,29 +122,28 @@ export function ChatSidebar({
         {!sessions.length && (
           <div className="history-empty">
             <MessageSquare size={25} />
-            <p>A little curiosity goes a long way.</p>
-            <small>
-              Your conversations will appear here after you ask a question.
-            </small>
+            <p>{t.emptyTitle}</p>
+            <small>{t.emptyText}</small>
           </div>
         )}
         {!!sessions.length &&
           !sessions.some((item) =>
             (
               cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-              "Analysis"
+              t.fallbackName
             )
               .toLowerCase()
               .includes(chatSearch.toLowerCase()),
-          ) && <p className="sidebar-hint">No chats match your search.</p>}
+          ) && <p className="sidebar-hint">{t.noMatch}</p>}
       </div>
       <div className="sidebar-bottom">
         <span>
-          <span className="dot" /> PostgreSQL source
+          <span className="dot" /> {t.source}
         </span>
+        <LanguageSwitch />
         <button
           className="icon-button"
-          aria-label="Sign out"
+          aria-label={t.signOut}
           disabled={busy}
           onClick={onSignOut}
         >

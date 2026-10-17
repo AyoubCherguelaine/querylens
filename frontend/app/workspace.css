@@ -87,7 +87,7 @@
   color: #6d7b90;
 }
 .workspace .section-label > span {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 10px;
   letter-spacing: 0;
 }
@@ -273,7 +273,7 @@
   gap: 18px;
 }
 .workspace .cube-stats div {
-  padding-left: 18px;
+  padding-inline-start: 18px;
 }
 .workspace .cube-stats span {
   font-size: 9px;
@@ -434,7 +434,7 @@
   overflow: auto;
   padding: 0 16px;
   background: #fff;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
 }
 .schema-sidebar-heading {
   display: flex;
@@ -546,7 +546,7 @@
 .field-list code {
   font-size: 9px;
   color: #8994a7;
-  text-align: right;
+  text-align: end;
   overflow-wrap: anywhere;
   max-width: 90px;
 }
@@ -610,11 +610,11 @@
     gap: 12px;
   }
   .workspace .cube-stats div {
-    padding-left: 12px;
+    padding-inline-start: 12px;
   }
   .workspace .cube-stats div:first-child {
-    border-left: 1px solid var(--border);
-    padding-left: 12px;
+    border-inline-start: 1px solid var(--border);
+    padding-inline-start: 12px;
   }
 }
 @media (max-width: 1280px) {
@@ -624,7 +624,8 @@
   .workspace .schema-sidebar {
     display: none;
     position: fixed;
-    inset: 0 0 0 auto;
+    inset-block: 0;
+    inset-inline: auto 0;
     width: min(340px, 88vw);
     z-index: 30;
     box-shadow: -12px 0 45px #1c2d4c18;
@@ -669,7 +670,8 @@
   .workspace .chat-sidebar {
     display: none;
     position: fixed;
-    inset: 0 auto 0 0;
+    inset-block: 0;
+    inset-inline: 0 auto;
     width: min(300px, 88vw);
     z-index: 30;
     box-shadow: 12px 0 45px #1c2d4c18;
@@ -682,7 +684,7 @@
     display: grid;
   }
   .workspace .chat-sidebar .drawer-close {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .workspace .workspace-label {
     display: flex;
@@ -754,7 +756,7 @@
     gap: 10px;
   }
   .workspace .cube-stats div {
-    padding-left: 10px;
+    padding-inline-start: 10px;
   }
   .workspace .cube-stats div:not(:last-child) {
     display: none;
@@ -830,7 +832,7 @@
     padding: 16px;
   }
   .workspace .result {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 @media (max-height: 780px) and (min-width: 601px) {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api, type Source, type SourceOverview } from "@/lib/api";
 import { ImportData } from "./import-data";
+import { useT } from "@/lib/i18n/client";
 
 export function SourceDashboard({
   overview,
@@ -24,6 +25,8 @@ export function SourceDashboard({
   onComplete: (source: Source) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.dashboard;
   const [importing, setImporting] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -49,12 +52,9 @@ export function SourceDashboard({
     <div className="source-dashboard">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">YOUR ANALYTICS START HERE</span>
-          <h1>A home for every dataset.</h1>
-          <p className="muted">
-            Import a file or reopen an existing source. Your tables stay
-            organized by schema.
-          </p>
+          <span className="eyebrow">{t.eyebrow}</span>
+          <h1>{t.title}</h1>
+          <p className="muted">{t.text}</p>
         </div>
         <button
           className="primary"
@@ -62,7 +62,7 @@ export function SourceDashboard({
           disabled={busy || importing}
         >
           <Plus size={16} />
-          Import data
+          {t.importData}
         </button>
       </div>
       <div className="dashboard-stats">
@@ -71,7 +71,7 @@ export function SourceDashboard({
             <Database size={19} />
           </span>
           <div>
-            <small>Saved sources</small>
+            <small>{t.savedSources}</small>
             <strong>{sources.length}</strong>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function SourceDashboard({
             <Table2 size={19} />
           </span>
           <div>
-            <small>Source tables</small>
+            <small>{t.sourceTables}</small>
             <strong>
               {sources.reduce((total, s) => total + (s.table_count ?? 0), 0)}
             </strong>
@@ -91,8 +91,8 @@ export function SourceDashboard({
             <Layers3 size={19} />
           </span>
           <div>
-            <small>Imported rows</small>
-            <strong>{importedRows.toLocaleString()}</strong>
+            <small>{t.importedRows}</small>
+            <strong>{importedRows.toLocaleString(intl)}</strong>
           </div>
         </div>
       </div>
@@ -114,8 +114,8 @@ export function SourceDashboard({
       )}
       <div className="sources-heading">
         <div>
-          <h2>Saved sources</h2>
-          <p className="muted">Continue from where your data already lives.</p>
+          <h2>{t.savedSources}</h2>
+          <p className="muted">{t.savedText}</p>
         </div>
         <button
           className="secondary"
@@ -133,7 +133,7 @@ export function SourceDashboard({
           }}
         >
           <RefreshCw size={14} />
-          Refresh
+          {t.refresh}
         </button>
       </div>
       {!sources.length ? (
@@ -141,18 +141,15 @@ export function SourceDashboard({
           <span className="empty-source-icon">
             <FolderOpen size={32} />
           </span>
-          <h2>Your first source belongs here</h2>
-          <p>
-            Upload a CSV to create a table, or a SQLite database to import
-            several tables into one schema.
-          </p>
+          <h2>{t.emptyTitle}</h2>
+          <p>{t.emptyText}</p>
           <button
             className="secondary"
             onClick={() => setImporting(true)}
             disabled={importing}
           >
             <Upload size={16} />
-            Import your first dataset
+            {t.importFirst}
           </button>
           <div className="schema-example">
             <span>sales_2026</span>
@@ -180,22 +177,23 @@ export function SourceDashboard({
                 className="source-filename"
                 title={source.filename || source.schema_name}
               >
-                {source.filename || "Connected PostgreSQL schema"}
+                {source.filename || t.connected}
               </p>
               <div className="source-metadata">
                 <span>
                   <Table2 size={13} />
-                  {source.table_count ?? 0}{" "}
-                  {(source.table_count ?? 0) === 1 ? "table" : "tables"}
+                  {t.tables(source.table_count ?? 0)}
                 </span>
-                <span>{new Date(source.created_at).toLocaleDateString()}</span>
+                <span>
+                  {new Date(source.created_at).toLocaleDateString(intl)}
+                </span>
               </div>
               <button
                 className="source-open"
                 onClick={() => onOpen(source.id)}
                 disabled={busy}
               >
-                Explore source
+                {t.explore}
                 <ArrowRight size={16} />
               </button>
             </article>
@@ -204,21 +202,15 @@ export function SourceDashboard({
       )}
       {!!overview.available_schemas.length && (
         <section className="existing-sources">
-          <span className="eyebrow">EXISTING POSTGRESQL SCHEMAS</span>
-          <h2>Use a source already connected</h2>
-          <p className="muted">
-            These schemas are available from your configured PostgreSQL
-            connection.
-          </p>
+          <span className="eyebrow">{t.existingEyebrow}</span>
+          <h2>{t.existingTitle}</h2>
+          <p className="muted">{t.existingText}</p>
           {overview.available_schemas.map((schema) => (
             <div className="existing-source" key={schema.schema_name}>
               <Database size={18} />
               <div>
                 <strong>{schema.schema_name}</strong>
-                <small>
-                  {schema.table_count}{" "}
-                  {schema.table_count === 1 ? "table" : "tables"} available
-                </small>
+                <small>{t.available(schema.table_count)}</small>
               </div>
               <button
                 className="secondary"
@@ -230,8 +222,8 @@ export function SourceDashboard({
                     s.kind === "existing" &&
                     s.schema_name === schema.schema_name,
                 )
-                  ? "Reopen source"
-                  : "Use this schema"}
+                  ? t.reopen
+                  : t.use}
                 <ArrowRight size={14} />
               </button>
             </div>

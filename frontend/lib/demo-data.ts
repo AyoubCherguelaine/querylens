@@ -1,21 +1,18 @@
 export const demoQuestions = [
   {
     id: "regions",
-    label: "Which region leads revenue?",
     metric: "Revenue",
     field: "region",
     sql: "SELECT region, SUM(revenue) AS revenue\nFROM demo.sales\nGROUP BY region\nORDER BY revenue DESC;",
   },
   {
     id: "trend",
-    label: "How is revenue trending?",
     metric: "Revenue",
     field: "month",
     sql: "SELECT month, SUM(revenue) AS revenue\nFROM demo.sales\nGROUP BY month\nORDER BY array_position(\n  ARRAY['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], month\n);",
   },
   {
     id: "channels",
-    label: "Where do orders come from?",
     metric: "Orders",
     field: "channel",
     sql: "SELECT channel, SUM(orders) AS orders\nFROM demo.sales\nGROUP BY channel\nORDER BY orders DESC;",
@@ -53,9 +50,9 @@ export function demoResult(question: DemoQuestion) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
   const first = rows[0];
   const last = rows[rows.length - 1];
-  const summary =
+  const percent =
     question.id === "trend"
-      ? `Monthly revenue increased ${Math.round(((last.value - first.value) / first.value) * 100)}% from January to June across the sample dataset.`
-      : `${first.label} accounts for ${Math.round((first.value / total) * 100)}% of ${question.id === "channels" ? "orders" : "revenue"} in the sample dataset.`;
-  return { rows, total, summary };
+      ? Math.round(((last.value - first.value) / first.value) * 100)
+      : Math.round((first.value / total) * 100);
+  return { rows, total, leader: first.label, percent };
 }

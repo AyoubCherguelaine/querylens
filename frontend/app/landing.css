@@ -19,7 +19,7 @@
 .landing-skip {
   position: absolute;
   top: -70px;
-  left: 20px;
+  inset-inline-start: 20px;
   z-index: 100;
   background: white;
   border: 1px solid var(--border);
@@ -88,7 +88,8 @@
   position: absolute;
   z-index: 0;
   pointer-events: none;
-  inset: 0 -200px -90px 20%;
+  inset-block: 0 -90px;
+  inset-inline: 20% -200px;
   background: radial-gradient(
     ellipse at 65% 40%,
     #eef2ff 0%,
@@ -266,7 +267,7 @@
   background: #b8d5c9;
 }
 .demo-toolbar > .demo-sample {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 9px;
 }
 .demo-sample > span {
@@ -285,7 +286,7 @@
   display: flex;
   flex-direction: column;
   padding: 20px 9px 16px;
-  border-right: 1px solid #e7ecf6;
+  border-inline-end: 1px solid #e7ecf6;
   background: #f4f6fb;
 }
 .demo-sidebar-label {
@@ -307,7 +308,7 @@
   border-radius: 6px;
   font-size: 9px;
   line-height: 1.6;
-  text-align: left;
+  text-align: start;
   color: #73819b;
 }
 .demo-chats > button svg {
@@ -441,7 +442,7 @@
   color: #718099;
 }
 .demo-chart li > strong {
-  text-align: right;
+  text-align: end;
   font-size: 8px;
   font-weight: 500;
   color: #4a5e81;
@@ -524,7 +525,7 @@
   margin-top: 12px;
 }
 .demo-schema {
-  border-left: 1px solid #e7ecf6;
+  border-inline-start: 1px solid #e7ecf6;
   padding: 20px 10px;
   display: flex;
   flex-direction: column;
@@ -781,7 +782,7 @@
 .auth-back {
   position: absolute;
   top: 24px;
-  left: 30px;
+  inset-inline-start: 30px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -829,8 +830,8 @@
     gap: 16px;
   }
   .landing-cta {
-    margin-left: 30px;
-    margin-right: 30px;
+    margin-inline-start: 30px;
+    margin-inline-end: 30px;
   }
   .landing-features {
     gap: 45px;
@@ -864,8 +865,8 @@
   .landing-hero-copy > p {
     font-size: 15px;
     max-width: 470px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-inline-start: auto;
+    margin-inline-end: auto;
   }
   .landing-hero-actions,
   .landing-hero-note,
@@ -993,8 +994,8 @@
     width: 14px;
   }
   .landing-preview-label {
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-inline-start: 2px;
+    padding-inline-end: 2px;
   }
   .landing-preview-label > span:first-child {
     font-size: 7px;
@@ -1009,7 +1010,7 @@
   }
   .demo-chats {
     padding: 14px 12px 8px;
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid #e7ecf6;
     flex-direction: row;
     flex-wrap: wrap;
@@ -1169,7 +1170,7 @@
   }
   .auth-back {
     top: 16px;
-    left: 20px;
+    inset-inline-start: 20px;
   }
   .auth-entry .auth-screen {
     padding-top: 65px;
@@ -1180,12 +1181,12 @@
     gap: 8px;
   }
   .landing-header {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-inline-start: 12px;
+    padding-inline-end: 12px;
   }
   .landing-hero {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-inline-start: 12px;
+    padding-inline-end: 12px;
   }
   .landing-hero h1 {
     font-size: 43px;

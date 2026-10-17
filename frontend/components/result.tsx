@@ -1,9 +1,13 @@
+"use client";
 import { CheckCircle2, Download, Info } from "lucide-react";
 import type { Result } from "@/lib/api";
 import { AgentSteps } from "./agent-steps";
 import { WrittenAnalysis } from "./written-analysis";
+import { useT } from "@/lib/i18n/client";
 
 export function AnalysisResult({ result }: { result: Result }) {
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.result;
   function download() {
     const blob = new Blob([JSON.stringify(result, null, 2)], {
       type: "application/json",
@@ -25,14 +29,14 @@ export function AnalysisResult({ result }: { result: Result }) {
         )}
         <span>
           {result.status === "answered"
-            ? "Answer"
-            : result.status === "clarification" ? "A little more context" : "Agent stopped"}
+            ? t.answer
+            : result.status === "clarification" ? t.clarification : t.stopped}
         </span>
         {result.duration_ms !== undefined && (
-          <small>{result.duration_ms} ms</small>
+          <small>{t.ms(result.duration_ms)}</small>
         )}
       </div>
-      {result.report ? <WrittenAnalysis report={result.report} /> : <p>{result.answer}</p>}
+      {result.report ? <WrittenAnalysis report={result.report} /> : <p dir="auto">{result.answer}</p>}
       <AgentSteps steps={result.steps || []} />
       {!!result.rows?.length && (
         <div className="table-scroll">
@@ -64,29 +68,29 @@ export function AnalysisResult({ result }: { result: Result }) {
       )}
       {result.truncated && (
         <p className="notice">
-          Result limit reached. Narrow your filters to see a complete result.
+          {t.truncated}
         </p>
       )}
       {(result.sql || result.steps?.length) && (
         <>
           <div className="evidence">
             <details>
-              <summary>{result.sql ? "Inspect query & evidence" : "Inspect agent details"}</summary>
+              <summary>{result.sql ? t.inspectQuery : t.inspectAgent}</summary>
               {result.sql && <>
                 <pre>{result.sql}</pre>
-                <p>Parameters</p>
+                <p>{t.parameters}</p>
                 <pre>{JSON.stringify(result.parameters, null, 2)}</pre>
               </>}
               {result.error && <pre>{JSON.stringify(result.error, null, 2)}</pre>}
               <p>
-                {result.sql ? "Executed" : "Finished"}{" "}
+                {result.sql ? t.executed : t.finished}{" "}
                 {result.executed_at
-                  ? new Date(result.executed_at).toLocaleString()
+                  ? new Date(result.executed_at).toLocaleString(intl)
                   : ""}
               </p>
               <pre>{JSON.stringify(result.plan, null, 2)}</pre>
               {result.warnings?.map((w) => (
-                <p className="muted" key={w}>
+                <p className="muted" key={w} dir="auto">
                   {w}
                 </p>
               ))}
@@ -94,7 +98,7 @@ export function AnalysisResult({ result }: { result: Result }) {
             <button
               className="icon-button"
               onClick={download}
-              aria-label="Download analysis evidence"
+              aria-label={t.download}
             >
               <Download size={17} />
             </button>

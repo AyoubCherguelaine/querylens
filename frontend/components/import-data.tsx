@@ -7,6 +7,7 @@ import {
   type Source,
   type SourceOverview,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
 
 export function ImportData({
   limits,
@@ -17,6 +18,9 @@ export function ImportData({
   onComplete: (source: Source) => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.imports;
+  const megabytes = Math.floor(limits.max_bytes / 1024 / 1024);
   const [file, setFile] = useState<File | null>(null),
     [preview, setPreview] = useState<ImportPreview | null>(null),
     [schema, setSchema] = useState(""),
@@ -32,9 +36,7 @@ export function ImportData({
     setPreview(null);
     setFile(candidate);
     if (candidate.size > limits.max_bytes) {
-      setError(
-        `File exceeds the ${Math.floor(limits.max_bytes / 1024 / 1024)} MB limit.`,
-      );
+      setError(t.tooLarge(megabytes));
       return;
     }
     setBusy(true);
@@ -77,17 +79,15 @@ export function ImportData({
     <section className="import-panel" aria-labelledby="import-title">
       <div className="import-header">
         <div>
-          <span className="eyebrow">NEW DATA SOURCE</span>
-          <h2 id="import-title">Bring your data into the workspace</h2>
-          <p className="muted">
-            One file, one schema. Preview the tables before importing.
-          </p>
+          <span className="eyebrow">{t.eyebrow}</span>
+          <h2 id="import-title">{t.title}</h2>
+          <p className="muted">{t.text}</p>
         </div>
         <button
           className="icon-button"
           onClick={onCancel}
           disabled={busy}
-          aria-label="Close import"
+          aria-label={t.close}
         >
           <X size={20} />
         </button>
@@ -125,19 +125,14 @@ export function ImportData({
         <strong>
           {busy
             ? phase === "preview"
-              ? "Inspecting your file…"
-              : "Importing into PostgreSQL…"
+              ? t.inspecting
+              : t.importing
             : file
               ? file.name
-              : "Choose a file or drop it here"}
+              : t.choose}
         </strong>
-        <span>
-          CSV or SQLite · up to {Math.floor(limits.max_bytes / 1024 / 1024)} MB
-          · {limits.max_rows.toLocaleString()} rows total
-        </span>
-        <small>
-          CSV needs a header row. SQLite supports multiple ordinary tables.
-        </small>
+        <span>{t.limits(megabytes, limits.max_rows.toLocaleString(intl))}</span>
+        <small>{t.hint}</small>
       </button>
       {error && (
         <p className="error" role="alert">
@@ -148,7 +143,7 @@ export function ImportData({
         <form onSubmit={confirm} className="import-preview">
           <div className="import-options">
             <label>
-              Schema name
+              {t.schemaName}
               <input
                 required
                 value={schema}
@@ -160,7 +155,7 @@ export function ImportData({
             </label>
             {preview.kind === "csv" && (
               <label>
-                Table name
+                {t.tableName}
                 <input
                   required
                   maxLength={200}
@@ -172,12 +167,11 @@ export function ImportData({
             )}
           </div>
           <p id="schema-help" className="field-help">
-            Names use lowercase letters and underscores. Existing schemas are
-            preserved; duplicates receive a suffix such as _2.
+            {t.schemaHelp}
           </p>
           <div className="preview-title">
             <h3>
-              Choose tables to import{" "}
+              {t.chooseTables}{" "}
               <span>
                 {selected.length}/{preview.tables.length}
               </span>
@@ -196,8 +190,8 @@ export function ImportData({
                 }
               >
                 {selected.length === preview.tables.length
-                  ? "Deselect all"
-                  : "Select all"}
+                  ? t.deselectAll
+                  : t.selectAll}
               </button>
             )}
           </div>
@@ -224,18 +218,20 @@ export function ImportData({
                   </small>
                 </span>
                 <span className="preview-table-stats">
-                  {table.row_count.toLocaleString()} rows ·{" "}
-                  {table.columns.length} columns
+                  {t.tableStats(
+                    table.row_count.toLocaleString(intl),
+                    table.columns.length,
+                  )}
                 </span>
               </label>
               <details open={preview.tables.length === 1}>
                 <summary>
-                  Preview fields and sample rows
+                  {t.previewFields}
                   {table.primary_key.length
-                    ? ` · Primary key: ${table.primary_key.join(", ")}`
+                    ? t.primaryKey(table.primary_key.join(", "))
                     : ""}
                   {table.foreign_keys.length
-                    ? ` · ${table.foreign_keys.length} foreign keys`
+                    ? t.foreignKeys(table.foreign_keys.length)
                     : ""}
                 </summary>
                 <div className="table-scroll">
@@ -270,15 +266,13 @@ export function ImportData({
                   </table>
                 </div>
                 {!table.sample_rows.length && (
-                  <p className="muted">
-                    Empty table: column definitions will still be imported.
-                  </p>
+                  <p className="muted">{t.emptyTable}</p>
                 )}
                 {table.foreign_keys.map((key, i) => (
                   <p className="relationship" key={i}>
                     {key.columns.join(", ")} → {key.target_table} (
                     {key.target_columns
-                      .map((c) => c || "primary key")
+                      .map((c) => c || t.primaryKeyFallback)
                       .join(", ")}
                     )
                   </p>
@@ -290,16 +284,11 @@ export function ImportData({
             {preview.warnings.map((w) => (
               <p key={w}>{w}</p>
             ))}
-            {preview.kind === "sqlite" && (
-              <p>
-                Select referenced tables together. Constraint failures roll back
-                the whole import.
-              </p>
-            )}
+            {preview.kind === "sqlite" && <p>{t.sqliteNote}</p>}
           </div>
           <div className="import-actions">
             <span>
-              <Check size={15} /> Preview only. Nothing has been saved yet.
+              <Check size={15} /> {t.previewOnly}
             </span>
             <button
               className="primary"
@@ -307,9 +296,7 @@ export function ImportData({
                 busy || !selected.length || !schema.trim() || !tableName.trim()
               }
             >
-              {busy
-                ? "Importing…"
-                : `Import ${selected.length} ${selected.length === 1 ? "table" : "tables"}`}
+              {busy ? t.importingShort : t.importTables(selected.length)}
             </button>
           </div>
         </form>

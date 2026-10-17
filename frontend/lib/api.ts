@@ -1,3 +1,10 @@
+import { defaultLocale, dictionaries, isLocale } from "./i18n/dictionaries";
+
+function errors() {
+  const lang = typeof document === "undefined" ? "" : document.documentElement.lang;
+  return dictionaries[isLocale(lang) ? lang : defaultLocale].errors;
+}
+
 export type Cube = {
   id: string;
   source_id: string;
@@ -72,9 +79,9 @@ export async function askAgent(
   });
   if (!response.ok) {
     const data = await response.json();
-    throw new Error(data.detail || "Could not start the agent.");
+    throw new Error(data.detail || errors().agentStart);
   }
-  if (!response.body) throw new Error("Agent stream is unavailable.");
+  if (!response.body) throw new Error(errors().agentStream);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -91,7 +98,7 @@ export async function askAgent(
         if (event.type === "result") return event.result;
         if (event.type === "error") throw new Error(event.detail);
       }
-      if (done) throw new Error("Agent connection ended before a final result. Retry your question.");
+      if (done) throw new Error(errors().agentEnded);
     }
   } finally {
     await reader.cancel();
@@ -109,7 +116,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     throw new Error(
       typeof data.detail === "string"
         ? data.detail
-        : "Please check the submitted values.",
+        : errors().invalid,
     );
   return data;
 }
@@ -172,7 +179,7 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
     throw new Error(
       typeof data.detail === "string"
         ? data.detail
-        : "Could not import this file. Check its format and values.",
+        : errors().importFailed,
     );
   return data;
 }

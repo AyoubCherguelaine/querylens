@@ -32,9 +32,12 @@ import { SourceDashboard } from "./source-dashboard";
 import { useRouter } from "next/navigation";
 import { AnalysisResult } from "./result";
 import { AgentSteps } from "./agent-steps";
+import { useT } from "@/lib/i18n/client";
 
 export function Workspace() {
   const router = useRouter();
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.workspace;
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
     [cubes, setCubes] = useState<Cube[]>([]),
     [selected, setSelected] = useState(""),
@@ -291,7 +294,7 @@ export function Workspace() {
         ...previous,
         {
           id: crypto.randomUUID(),
-          question: "Count all rows (direct analysis)",
+          question: t.countRowsQuestion,
           result,
         },
       ]);
@@ -310,7 +313,7 @@ export function Workspace() {
       const result = await api<Result>(`cubes/${cube.id}/profile`, {});
       setMessages((previous) => [
         ...previous,
-        { id: crypto.randomUUID(), question: "Profile source data", result },
+        { id: crypto.randomUUID(), question: t.profileQuestion, result },
       ]);
       setTab("analysis");
     } catch (error) {
@@ -347,13 +350,13 @@ export function Workspace() {
   if (authenticated === null)
     return (
       <main className="loading-screen" role="status">
-        Connecting to your workspace…
+        {t.connecting}
       </main>
     );
   if (!authenticated)
     return (
       <main className="loading-screen" role="status">
-        Opening sign in…
+        {t.openingSignIn}
       </main>
     );
   return (
@@ -362,7 +365,7 @@ export function Workspace() {
         <button
           className="panel-backdrop"
           tabIndex={-1}
-          aria-label="Close sidebar"
+          aria-label={t.closeSidebar}
           onClick={() => {
             setLeftOpen(false);
             setRightOpen(false);
@@ -386,7 +389,7 @@ export function Workspace() {
           <div className="workspace-crumb">
             <button
               className="icon-button mobile-toggle"
-              aria-label="Open chats"
+              aria-label={t.openChats}
               aria-expanded={leftOpen}
               aria-controls="chat-sidebar"
               onClick={() => {
@@ -397,17 +400,17 @@ export function Workspace() {
               <MessageSquare size={19} />
             </button>
             <span className="desktop-crumb">
-              Workspace <ChevronRight size={14} />
+              {t.crumb} <ChevronRight size={14} />
             </span>
             <strong>
               {view === "dashboard"
-                ? "Data sources"
+                ? t.sourcesTitle
                 : view === "upload"
-                  ? "Upload data"
-                  : "Analysis"}
+                  ? t.uploadTitle
+                  : t.analysisTitle}
             </strong>
           </div>
-          <nav className="workspace-nav" aria-label="Workspace navigation">
+          <nav className="workspace-nav" aria-label={t.nav}>
             <button
               className={view === "analysis" ? "active" : ""}
               aria-current={view === "analysis" ? "page" : undefined}
@@ -418,7 +421,7 @@ export function Workspace() {
               }}
             >
               <Sparkles size={15} />
-              <span>Chat</span>
+              <span>{t.chat}</span>
             </button>
             <button
               className={view === "dashboard" ? "active" : ""}
@@ -430,7 +433,7 @@ export function Workspace() {
               }}
             >
               <FolderOpen size={15} />
-              <span>Sources</span>
+              <span>{t.sources}</span>
             </button>
             <button
               className={view === "upload" ? "active" : ""}
@@ -442,12 +445,12 @@ export function Workspace() {
               }}
             >
               <Upload size={15} />
-              <span>Upload</span>
+              <span>{t.upload}</span>
             </button>
           </nav>
           <button
             className="schema-toggle secondary"
-            aria-label="Open schemas"
+            aria-label={t.openSchemas}
             aria-expanded={rightOpen}
             aria-controls="schema-sidebar"
             onClick={() => {
@@ -456,7 +459,7 @@ export function Workspace() {
             }}
           >
             <Database size={16} />
-            <span>Schemas</span>
+            <span>{t.schemas}</span>
           </button>
         </header>
         <div
@@ -465,8 +468,8 @@ export function Workspace() {
           {loadingData ? (
             <div className="workspace-loading" role="status">
               <RefreshCw size={24} className="spin" />
-              <h2>Preparing your workspace</h2>
-              <p>Loading your schemas and conversations…</p>
+              <h2>{t.preparing}</h2>
+              <p>{t.loading}</p>
             </div>
           ) : view === "upload" ? (
             <ImportData
@@ -494,12 +497,12 @@ export function Workspace() {
             <>
               <div className="page-heading">
                 <div>
-                  <span className="eyebrow">EXPLORE WITH CONFIDENCE</span>
-                  <h1>Let’s find your next insight.</h1>
+                  <span className="eyebrow">{t.eyebrow}</span>
+                  <h1>{t.heading}</h1>
                   <p className="muted">
                     {activeSource
-                      ? `Exploring ${activeSource.schema_name}. Ask a question and follow the evidence.`
-                      : "Connect a source, choose a table, and start a conversation."}
+                      ? t.exploring(activeSource.schema_name)
+                      : t.connectPrompt}
                   </p>
                 </div>
                 <button
@@ -508,22 +511,14 @@ export function Workspace() {
                   onClick={discover}
                 >
                   <RefreshCw size={15} className={busy ? "spin" : ""} />
-                  Discover cubes
+                  {t.discoverCubes}
                 </button>
               </div>
               {!cube ? (
                 <section className="empty-card">
                   <Database size={38} />
-                  <h2>
-                    {selectedSource
-                      ? "No tables are available in this source"
-                      : "Good questions start with your data."}
-                  </h2>
-                  <p>
-                    {selectedSource
-                      ? "Discover tables in this source, or choose another schema in the right sidebar."
-                      : "Upload a dataset or connect a PostgreSQL schema to start exploring. Your chats live on the left, and your schemas on the right."}
-                  </p>
+                  <h2>{selectedSource ? t.noTables : t.startWithData}</h2>
+                  <p>{selectedSource ? t.noTablesText : t.startWithDataText}</p>
                   <button
                     className="primary"
                     onClick={() =>
@@ -531,7 +526,7 @@ export function Workspace() {
                     }
                     disabled={busy}
                   >
-                    {selectedSource ? "Discover tables" : "Upload your data"}{" "}
+                    {selectedSource ? t.discoverTables : t.uploadData}{" "}
                     <ArrowUp size={16} />
                   </button>
                   {error && (
@@ -555,23 +550,23 @@ export function Workspace() {
                       </div>
                       <span className="tag">
                         {cube.definition.kind
-                          ? `${cube.definition.kind} cube`
-                          : "Source cube"}
+                          ? t.kindCube(cube.definition.kind)
+                          : t.sourceCube}
                       </span>
                     </div>
                     <div className="cube-stats">
                       <div>
-                        <span>Dimensions</span>
+                        <span>{t.dimensions}</span>
                         <strong>{cube.definition.dimensions.length}</strong>
                       </div>
                       <div>
-                        <span>Candidate measures</span>
+                        <span>{t.candidateMeasures}</span>
                         <strong>{cube.definition.measures.length}</strong>
                       </div>
                       <div>
-                        <span>Estimated rows</span>
+                        <span>{t.estimatedRows}</span>
                         <strong>
-                          ~{cube.definition.estimated_rows.toLocaleString()}
+                          ~{cube.definition.estimated_rows.toLocaleString(intl)}
                         </strong>
                       </div>
                     </div>
@@ -582,14 +577,14 @@ export function Workspace() {
                       onClick={() => setTab("analysis")}
                     >
                       <Sparkles size={16} />
-                      Analysis
+                      {t.analysisTab}
                     </button>
                     <button
                       className={tab === "schema" ? "active" : ""}
                       onClick={() => setTab("schema")}
                     >
                       <Table2 size={16} />
-                      Schema & measures
+                      {t.schemaTab}
                     </button>
                     <button
                       className="new-analysis"
@@ -597,7 +592,7 @@ export function Workspace() {
                       onClick={() => choose(selected)}
                     >
                       <Plus size={15} />
-                      New analysis
+                      {t.newAnalysis}
                     </button>
                   </div>
                   {error && tab === "schema" && (
@@ -608,28 +603,25 @@ export function Workspace() {
                   {tab === "schema" ? (
                     <section className="schema-card">
                       <div className="profile-heading">
-                        <h3>Business model</h3>
+                        <h3>{t.businessModel}</h3>
                         <button
                           className="secondary"
                           disabled={busy}
                           onClick={profile}
                         >
-                          Profile data quality
+                          {t.profile}
                         </button>
                       </div>
                       <p>{cube.definition.description}</p>
                       <p className="muted">{cube.definition.grain}</p>
                       {!!cube.definition.joins?.length && (
                         <div className="source-relationships">
-                          <h3>Related dimensions</h3>
-                          <p className="muted">
-                            These declared relationships preserve this cube’s
-                            grain. Related amounts stay in their own cubes.
-                          </p>
+                          <h3>{t.relatedDimensions}</h3>
+                          <p className="muted">{t.relatedText}</p>
                           {cube.definition.joins.map((join) => (
                             <p className="relationship" key={join.path}>
                               <strong>{join.path}</strong> → {join.schema}.
-                              {join.table} · many to one
+                              {join.table} · {t.manyToOne}
                             </p>
                           ))}
                         </div>
@@ -638,10 +630,10 @@ export function Workspace() {
                         <table>
                           <thead>
                             <tr>
-                              <th>Field</th>
-                              <th>PostgreSQL type</th>
-                              <th>Business role</th>
-                              <th>Nullable</th>
+                              <th>{t.field}</th>
+                              <th>{t.pgType}</th>
+                              <th>{t.role}</th>
+                              <th>{t.nullable}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -653,15 +645,15 @@ export function Workspace() {
                                 </td>
                                 <td>
                                   {f.role?.replaceAll("_", " ") ||
-                                    (f.key ? "identifier" : "dimension")}
+                                    (f.key ? t.identifier : t.dimension)}
                                 </td>
-                                <td>{f.nullable ? "Yes" : "No"}</td>
+                                <td>{f.nullable ? t.yes : t.no}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                      <h3>Candidate measures</h3>
+                      <h3>{t.candidateMeasures}</h3>
                       <div className="chips">
                         {cube.definition.measures.map((m, i) => (
                           <span className="tag" key={i} title={m.description}>
@@ -671,12 +663,8 @@ export function Workspace() {
                       </div>
                       {!!importedTable?.foreign_keys.length && (
                         <div className="source-relationships">
-                          <h3>Imported relationships</h3>
-                          <p className="muted">
-                            These keys are preserved in PostgreSQL and used to
-                            model related dimensions when they preserve the
-                            cube’s grain.
-                          </p>
+                          <h3>{t.importedRelationships}</h3>
+                          <p className="muted">{t.importedText}</p>
                           {importedTable.foreign_keys.map((key, index) => (
                             <p className="relationship" key={index}>
                               {key.columns.join(", ")} → {key.target_table} (
@@ -687,7 +675,7 @@ export function Workspace() {
                       )}
                       {!!cube.definition.suggested_questions?.length && (
                         <div>
-                          <h3>Explore this model</h3>
+                          <h3>{t.exploreModel}</h3>
                           {cube.definition.suggested_questions.map(
                             (suggestion) => (
                               <button
@@ -719,37 +707,33 @@ export function Workspace() {
                             <span className="sparkle">
                               <Sparkles size={26} />
                             </span>
-                            <h2>What would you like to understand?</h2>
+                            <h2>{t.emptyTitle}</h2>
                             <p>
-                              Explore <strong>{cube.definition.name}</strong>{" "}
-                              with a question about its fields.
+                              {t.emptyExplore}{" "}
+                              <strong>{cube.definition.name}</strong>{" "}
+                              {t.emptyWith}
                               <br />
-                              Every result includes the executed query and
-                              source evidence.
+                              {t.emptyEvidence}
                             </p>
                             <div className="suggestions">
                               <button
                                 disabled={busy}
                                 onClick={() =>
-                                  setQuestion(
-                                    "Write a readable analysis of this source: summarize the main findings, explain useful comparisons, and state data limitations.",
-                                  )
+                                  setQuestion(t.writeAnalysisPrompt)
                                 }
                               >
                                 <Sparkles size={17} />
                                 <span>
-                                  Write an analysis
-                                  <small>
-                                    Turn data into a readable report
-                                  </small>
+                                  {t.writeAnalysis}
+                                  <small>{t.writeAnalysisHint}</small>
                                 </span>
                                 <ChevronRight size={16} />
                               </button>
                               <button disabled={busy} onClick={countRows}>
                                 <Table2 size={17} />
                                 <span>
-                                  Count all rows
-                                  <small>Run directly, no model needed</small>
+                                  {t.countRows}
+                                  <small>{t.countRowsHint}</small>
                                 </span>
                                 <ChevronRight size={16} />
                               </button>
@@ -757,14 +741,12 @@ export function Workspace() {
                                 <button
                                   disabled={busy}
                                   onClick={() =>
-                                    setQuestion(
-                                      `Count rows by ${suggestedDimension}`,
-                                    )
+                                    setQuestion(t.countBy(suggestedDimension))
                                   }
                                 >
                                   <Layers3 size={17} />
                                   <span>
-                                    Compare by dimension
+                                    {t.compare}
                                     <small>{suggestedDimension}</small>
                                   </span>
                                   <ChevronRight size={16} />
@@ -776,8 +758,8 @@ export function Workspace() {
                           messages.map((m) => (
                             <div className="exchange" key={m.id}>
                               <div className="question">
-                                <span className="user-avatar">You</span>
-                                <p>{m.question}</p>
+                                <span className="user-avatar">{t.you}</span>
+                                <p dir="auto">{m.question}</p>
                               </div>
                               <AnalysisResult result={m.result} />
                             </div>
@@ -785,13 +767,13 @@ export function Workspace() {
                         )}
                         {pendingQuestion && (
                           <div className="question pending-question">
-                            <span className="user-avatar">You</span>
-                            <p>{pendingQuestion}</p>
+                            <span className="user-avatar">{t.you}</span>
+                            <p dir="auto">{pendingQuestion}</p>
                           </div>
                         )}
                         {busy && (
                           <div role="status" className="working">
-                            <span className="dot" /> Working on your analysis…
+                            <span className="dot" /> {t.working}
                           </div>
                         )}
                         <AgentSteps steps={agentSteps} />
@@ -804,7 +786,7 @@ export function Workspace() {
                         )}
                         <form className="composer" onSubmit={ask}>
                           <label className="sr-only" htmlFor="question">
-                            Ask about this cube
+                            {t.askLabel}
                           </label>
                           <textarea
                             id="question"
@@ -812,7 +794,7 @@ export function Workspace() {
                             onChange={(e) => setQuestion(e.target.value)}
                             disabled={busy}
                             maxLength={2000}
-                            placeholder={`Ask a question about ${cube.definition.name.toLowerCase()}…`}
+                            placeholder={t.askPlaceholder(cube.definition.name)}
                             rows={2}
                             onKeyDown={(e) => {
                               if (
@@ -834,16 +816,13 @@ export function Workspace() {
                               className="send-button"
                               type="submit"
                               disabled={busy || !question.trim()}
-                              aria-label="Send question"
+                              aria-label={t.send}
                             >
                               <ArrowUp size={18} />
                             </button>
                           </div>
                         </form>
-                        <p className="composer-note">
-                          Answers come from query results. Review the plan and
-                          metric meaning before making decisions.
-                        </p>
+                        <p className="composer-note">{t.composerNote}</p>
                       </div>
                     </section>
                   )}

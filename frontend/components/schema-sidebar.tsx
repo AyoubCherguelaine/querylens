@@ -11,6 +11,7 @@ import {
   Layers3,
 } from "lucide-react";
 import type { Cube, SourceOverview } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
 
 export function SchemaSidebar({
   leftOpen,
@@ -43,12 +44,13 @@ export function SchemaSidebar({
   onViewSchema: () => void;
   onUpload: () => void;
 }) {
+  const t = useT().t.schema;
   const [schemaSearch, setSchemaSearch] = useState("");
   return (
     <aside
       id="schema-sidebar"
       className={`schema-sidebar ${rightOpen ? "is-open" : ""}`}
-      aria-label="Schemas and tables"
+      aria-label={t.label}
       role={rightOpen ? "dialog" : undefined}
       aria-modal={rightOpen || undefined}
       inert={leftOpen}
@@ -56,27 +58,27 @@ export function SchemaSidebar({
       <div className="schema-sidebar-heading">
         <div>
           <Database size={17} />
-          <h2>Schema explorer</h2>
+          <h2>{t.title}</h2>
         </div>
         <button
           className="icon-button drawer-close"
-          aria-label="Close schemas"
+          aria-label={t.close}
           onClick={() => onClose()}
         >
           <X size={18} />
         </button>
       </div>
       <label className="source-selector">
-        ACTIVE SCHEMA
+        {t.active}
         <select
-          aria-label="Active data source"
+          aria-label={t.activeLabel}
           value={selectedSource}
           disabled={busy}
           onChange={(e) => {
             if (e.target.value) onSourceChange(e.target.value);
           }}
         >
-          <option value="">Choose a source</option>
+          <option value="">{t.choose}</option>
           {overview.sources.map((source) => (
             <option key={source.id} value={source.id}>
               {source.schema_name}
@@ -87,17 +89,17 @@ export function SchemaSidebar({
       <label className="sidebar-search">
         <Search size={15} />
         <input
-          aria-label="Search tables"
-          placeholder="Find a table…"
+          aria-label={t.search}
+          placeholder={t.searchPlaceholder}
           value={schemaSearch}
           onChange={(e) => setSchemaSearch(e.target.value)}
         />
       </label>
       <div className="section-label">
-        <Table2 size={13} /> TABLES <span>{sourceCubes.length}</span>
+        <Table2 size={13} /> {t.tables} <span>{sourceCubes.length}</span>
         <button
           className="icon-button"
-          aria-label="Refresh schema tables"
+          aria-label={t.refresh}
           disabled={busy || !selectedSource}
           onClick={onDiscover}
         >
@@ -129,9 +131,7 @@ export function SchemaSidebar({
           ))}
         {!sourceCubes.length && (
           <p className="sidebar-hint">
-            {selectedSource
-              ? "Discover tables to explore this schema."
-              : "Choose a saved schema or add a data source to see its tables."}
+            {selectedSource ? t.discoverHint : t.chooseHint}
           </p>
         )}
         {!!sourceCubes.length &&
@@ -139,12 +139,12 @@ export function SchemaSidebar({
             `${item.definition.name} ${item.definition.table}`
               .toLowerCase()
               .includes(schemaSearch.toLowerCase()),
-          ) && <p className="sidebar-hint">No tables match your search.</p>}
+          ) && <p className="sidebar-hint">{t.noMatch}</p>}
       </div>
       {cube && (
         <div className="schema-details">
           <div className="section-label">
-            SELECTED TABLE <span>{cube.definition.fields.length} fields</span>
+            {t.selected} <span>{t.fields(cube.definition.fields.length)}</span>
           </div>
           <h3>{cube.definition.table}</h3>
           <div className="field-list">
@@ -168,18 +168,19 @@ export function SchemaSidebar({
               onClose();
             }}
           >
-            View schema & measures <ChevronRight size={14} />
+            {t.viewSchema} <ChevronRight size={14} />
           </button>
         </div>
       )}
       <div className="schema-sidebar-footer">
         <Layers3 size={18} />
         <div>
-          Bring more data into focus<small>CSV, SQLite, or PostgreSQL</small>
+          {t.more}
+          <small>{t.moreHint}</small>
         </div>
         <button
           className="icon-button"
-          aria-label="Add a data source"
+          aria-label={t.add}
           disabled={busy}
           onClick={() => {
             onUpload();

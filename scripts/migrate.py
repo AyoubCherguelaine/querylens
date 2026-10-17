@@ -20,7 +20,10 @@ async def main():
                 else []
             )
             versions = {row["version"] for row in applied}
-            for path in sorted(Path("migrations").glob("*.sql")):
+            paths = sorted(Path("migrations").glob("*.sql"))
+            if not paths:
+                raise SystemExit(f"No migrations found in {Path('migrations').resolve()}")
+            for path in paths:
                 version = int(path.name.split("_", 1)[0])
                 if version in versions:
                     continue
@@ -30,6 +33,11 @@ async def main():
                     version,
                 )
                 print(f"Applied {path.name}")
+            row = await connection.fetchrow(
+                "SELECT current_database() AS db, inet_server_addr() AS host,"
+                " (SELECT max(version) FROM chat_olap.schema_migrations) AS version"
+            )
+            print(f"Database {row['db']} on {row['host']} is at migration version {row['version']}")
     finally:
         await connection.close()
 

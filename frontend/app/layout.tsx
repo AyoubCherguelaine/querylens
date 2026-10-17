@@ -2,15 +2,24 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./workspace.css";
 import "./landing.css";
-export const metadata: Metadata = {
-  title: "Cube Chat · A clearer conversation with your data",
-  description:
-    "Explore PostgreSQL data with inspectable cubes and grounded analytical answers.",
-};
-export default function Layout({ children }: { children: React.ReactNode }) {
+import { direction } from "@/lib/i18n/dictionaries";
+import { I18nProvider } from "@/lib/i18n/client";
+import { getDictionary, getLocale } from "@/lib/i18n/server";
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getDictionary();
+  return { title: t.meta.title, description: t.meta.description };
+}
+export default async function Layout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const locale = await getLocale();
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang={locale} dir={direction(locale)}>
+      <body>
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

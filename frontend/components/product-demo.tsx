@@ -11,25 +11,34 @@ import {
   Table2,
 } from "lucide-react";
 import { demoQuestions, demoResult, demoSales } from "@/lib/demo-data";
+import { useT } from "@/lib/i18n/client";
 
 export function ProductDemo() {
+  const { t: dictionary, intl } = useT();
+  const t = dictionary.demo;
   const [selected, setSelected] = useState(0);
   const question = demoQuestions[selected];
   const result = demoResult(question);
+  const metric = t.metrics[question.metric];
+  const summary =
+    question.id === "trend"
+      ? t.trendSummary(result.percent)
+      : t.shareSummary(result.leader, result.percent, question.id === "channels");
   const max = Math.max(...result.rows.map((row) => row.value));
   const format = (value: number) =>
     question.id === "channels"
-      ? value.toLocaleString("en-US")
-      : new Intl.NumberFormat("en-US", {
+      ? value.toLocaleString(intl)
+      : new Intl.NumberFormat(intl, {
           style: "currency",
           currency: "USD",
+          currencyDisplay: "narrowSymbol",
           maximumFractionDigits: 0,
         }).format(value);
   return (
     <section
       className="product-demo"
       id="demo"
-      aria-label="Interactive product demo"
+      aria-label={t.label}
     >
       <div className="demo-toolbar">
         <div className="demo-window-dots" aria-hidden="true">
@@ -42,12 +51,12 @@ export function ProductDemo() {
         </span>
         <span className="demo-sample">
           <span />
-          Sample workspace
+          {t.sample}
         </span>
       </div>
       <div className="demo-body">
-        <aside className="demo-chats" aria-label="Demo questions">
-          <span className="demo-sidebar-label">TRY A QUESTION</span>
+        <aside className="demo-chats" aria-label={t.questionsLabel}>
+          <span className="demo-sidebar-label">{t.tryQuestion}</span>
           {demoQuestions.map((item, index) => (
             <button
               key={item.id}
@@ -56,42 +65,43 @@ export function ProductDemo() {
               aria-pressed={selected === index}
             >
               <MessageSquare size={13} />
-              <span>{item.label}</span>
+              <span>{t.questions[item.id]}</span>
             </button>
           ))}
           <div className="demo-sidebar-note">
             <Play size={14} />
             <span>
-              Interactive demo<small>No sign-in needed</small>
+              {t.interactive}
+              <small>{t.noSignIn}</small>
             </span>
           </div>
         </aside>
         <div className="demo-conversation">
           <div className="demo-context">
             <span>
-              <Sparkles size={13} /> Sales analysis
+              <Sparkles size={13} /> {t.context}
             </span>
-            <span>Jan–Jun 2026</span>
+            <span>{t.period}</span>
           </div>
           <div className="demo-question">
-            <span className="demo-avatar">Y</span>
-            <p>{question.label}</p>
+            <span className="demo-avatar">{t.avatar}</span>
+            <p>{t.questions[question.id]}</p>
           </div>
           <div className="demo-answer" aria-live="polite" aria-atomic="true">
             <span className="demo-answer-label">
-              <Sparkles size={13} /> An answer you can inspect
+              <Sparkles size={13} /> {t.answerLabel}
             </span>
-            <p>{result.summary}</p>
+            <p>{summary}</p>
             <div className="demo-total">
-              <span>Total {question.metric.toLowerCase()}</span>
+              <span>{t.total(metric)}</span>
               <strong>{format(result.total)}</strong>
-              <small>Across {demoSales.length} sample records</small>
+              <small>{t.across(demoSales.length)}</small>
             </div>
             <figure
               className={`demo-chart ${question.id === "trend" ? "monthly" : ""}`}
             >
               <figcaption>
-                {question.metric} by {question.field}
+                {t.chartCaption(metric, question.field)}
               </figcaption>
               <ul>
                 {result.rows.map((row, index) => (
@@ -112,23 +122,23 @@ export function ProductDemo() {
             </figure>
             <div className="demo-result-footer">
               <span>
-                <Check size={12} /> Calculated from sample data
+                <Check size={12} /> {t.calculated}
               </span>
-              <span>{result.rows.length} groups</span>
+              <span>{t.groups(result.rows.length)}</span>
             </div>
           </div>
           <details className="demo-evidence" key={question.id}>
             <summary>
-              Inspect query & results <ChevronDown size={13} />
+              {t.inspect} <ChevronDown size={13} />
             </summary>
             <pre>{question.sql}</pre>
             <div className="table-scroll">
               <table>
-                <caption className="sr-only">Aggregated sample results</caption>
+                <caption className="sr-only">{t.tableCaption}</caption>
                 <thead>
                   <tr>
                     <th>{question.field}</th>
-                    <th>{question.metric}</th>
+                    <th>{metric}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -143,11 +153,11 @@ export function ProductDemo() {
             </div>
           </details>
           <div className="demo-prompt-note">
-            <ArrowUpRight size={13} /> Choose another sample question to explore.
+            <ArrowUpRight size={13} /> {t.another}
           </div>
         </div>
-        <aside className="demo-schema" aria-label="Demo schema">
-          <span className="demo-sidebar-label">SCHEMA</span>
+        <aside className="demo-schema" aria-label={t.schemaLabel}>
+          <span className="demo-sidebar-label">{t.schema}</span>
           <span className="demo-schema-name">
             <Database size={12} /> demo
           </span>
@@ -163,12 +173,11 @@ export function ProductDemo() {
               {field}
             </span>
           ))}
-          <small>{demoSales.length} sample rows</small>
+          <small>{t.rows(demoSales.length)}</small>
         </aside>
       </div>
       <div className="demo-disclaimer">
-        <span className="demo-live-dot" /> A guided preview with preset
-        questions and sample data. Your workspace analyzes your own sources.
+        <span className="demo-live-dot" /> {t.disclaimer}
       </div>
     </section>
   );

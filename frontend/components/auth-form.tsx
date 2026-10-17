@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ArrowRight, Database } from "lucide-react";
 import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
 
 export function AuthForm({
   onSuccess,
@@ -10,6 +11,7 @@ export function AuthForm({
   onSuccess: () => void;
   initialSignup?: boolean;
 }) {
+  const t = useT().t.auth;
   const [signup, setSignup] = useState(initialSignup),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -30,7 +32,7 @@ export function AuthForm({
       await api("users/login", { email, password });
       onSuccess();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Unable to sign in.");
+      setError(error instanceof Error ? error.message : t.failed);
     } finally {
       setBusy(false);
     }
@@ -42,40 +44,34 @@ export function AuthForm({
           <span className="brand-mark">
             <Database size={20} />
           </span>
-          cube<span className="muted">/</span>chat
+          <bdi className="brand-name" dir="ltr">
+            cube<span className="muted">/</span>chat
+          </bdi>
         </span>
-        <span className="eyebrow">YOUR DATA. A CLEARER PICTURE.</span>
+        <span className="eyebrow">{t.eyebrow}</span>
         <h1>
-          Good questions.
+          {t.title1}
           <br />
-          <span>Grounded answers.</span>
+          <span>{t.title2}</span>
         </h1>
-        <p>
-          Turn your PostgreSQL data into an analytical workspace. Explore
-          dimensions, ask questions, and inspect every result.
-        </p>
+        <p>{t.intro}</p>
         <div className="auth-proof">
-          <Database size={18} /> PostgreSQL at the core <span>·</span> Evidence
-          with every answer
+          <Database size={18} /> {t.proof1} <span>·</span> {t.proof2}
         </div>
       </div>
       <section className="auth-card">
-        <span className="eyebrow">ANALYTICS WORKSPACE</span>
-        <h2>{signup ? "Create your account" : "Welcome back"}</h2>
-        <p className="muted">
-          {signup
-            ? "Set up your workspace to start exploring."
-            : "Sign in to continue your analysis."}
-        </p>
+        <span className="eyebrow">{t.cardEyebrow}</span>
+        <h2>{signup ? t.createTitle : t.welcomeTitle}</h2>
+        <p className="muted">{signup ? t.createText : t.welcomeText}</p>
         <form onSubmit={submit}>
           {signup && (
             <label>
-              Full name
+              {t.fullName}
               <input name="name" autoComplete="name" maxLength={100} />
             </label>
           )}
           <label>
-            Email address
+            {t.email}
             <input
               name="email"
               type="email"
@@ -85,7 +81,7 @@ export function AuthForm({
             />
           </label>
           <label>
-            Password
+            {t.password}
             <input
               name="password"
               type="password"
@@ -93,7 +89,7 @@ export function AuthForm({
               minLength={signup ? 8 : 1}
               maxLength={128}
               autoComplete={signup ? "new-password" : "current-password"}
-              placeholder={signup ? "At least 8 characters" : "Your password"}
+              placeholder={signup ? t.newPassword : t.currentPassword}
             />
           </label>
           {error && (
@@ -102,11 +98,7 @@ export function AuthForm({
             </p>
           )}
           <button className="primary" disabled={busy}>
-            {busy
-              ? "Connecting…"
-              : signup
-                ? "Create account"
-                : "Enter workspace"}
+            {busy ? t.connecting : signup ? t.createAccount : t.enter}
             <ArrowRight size={17} />
           </button>
         </form>
@@ -117,9 +109,7 @@ export function AuthForm({
             setError("");
           }}
         >
-          {signup
-            ? "Already have an account? Sign in"
-            : "New here? Create an account"}
+          {signup ? t.haveAccount : t.newHere}
         </button>
       </section>
     </main>
