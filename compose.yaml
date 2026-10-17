@@ -53,7 +53,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3001}
     ports:
-      - "127.0.0.1:3001:3001"
+      - "${WEB_BIND:-127.0.0.1}:3001:3001"
     depends_on:
       api:
         condition: service_healthy
