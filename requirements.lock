@@ -53,6 +53,8 @@ openai==2.54.0
     # via -r requirements.txt
 opentelemetry-api==1.45.1
     # via fastapi
+pglast==7.20
+    # via -r requirements.txt
 pwdlib==0.3.1
     # via -r requirements.txt
 pycparser==3.11

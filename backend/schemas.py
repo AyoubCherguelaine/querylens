@@ -51,6 +51,7 @@ class SessionCreate(StrictModel):
 
 class Question(StrictModel):
     question: str = Field(min_length=1, max_length=2000)
+    stream: bool = False
 
 
 class Analysis(StrictModel):

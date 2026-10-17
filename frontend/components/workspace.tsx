@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import {
   api,
+  askAgent,
+  type AgentStep,
   type Cube,
   type Message,
   type Result,
@@ -26,6 +28,7 @@ import {
 import { SourceDashboard } from "./source-dashboard";
 import { AuthForm } from "./auth-form";
 import { AnalysisResult } from "./result";
+import { AgentSteps } from "./agent-steps";
 
 export function Workspace() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
@@ -40,6 +43,7 @@ export function Workspace() {
     [tab, setTab] = useState<"analysis" | "schema">("analysis");
   const [view, setView] = useState<"dashboard" | "analysis">("dashboard");
   const [selectedSource, setSelectedSource] = useState("");
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [overview, setOverview] = useState<SourceOverview>({
     sources: [],
     available_schemas: [],
@@ -104,7 +108,7 @@ export function Workspace() {
   }, []);
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, busy, agentSteps]);
   function choose(id: string) {
     setView("analysis");
     setSelectedSource(
@@ -152,8 +156,9 @@ export function Workspace() {
   }
   async function ask(event: React.FormEvent) {
     event.preventDefault();
-    if (!question.trim() || !cube) return;
+    if (busy || !question.trim() || !cube) return;
     setBusy(true);
+    setAgentSteps([]);
     setError("");
     const text = question.trim();
     try {
@@ -165,14 +170,20 @@ export function Workspace() {
         id = created.id;
         setSession(id);
       }
-      const result = await api<Result>(`chat/session/${id}/messages`, {
-        question: text,
+      const result = await askAgent(id, text, (step) => {
+        setAgentSteps((previous) => {
+          const found = previous.some((item) => item.id === step.id);
+          return found
+            ? previous.map((item) => item.id === step.id ? step : item)
+            : [...previous, step];
+        });
       });
       setMessages((previous) => [
         ...previous,
         { id: crypto.randomUUID(), question: text, result },
       ]);
       setQuestion("");
+      setAgentSteps([]);
       setSessions(await api<Session[]>("chat/sessions"));
     } catch (e) {
       setError((e as Error).message);
@@ -633,6 +644,7 @@ export function Workspace() {
                             <span className="dot" /> Working on your analysis…
                           </div>
                         )}
+                        <AgentSteps steps={agentSteps} />
                         <div ref={end} />
                       </div>
                       <div className="composer-wrap">

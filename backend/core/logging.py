@@ -21,6 +21,9 @@ class JsonFormatter(logging.Formatter):
             "model",
             "tokens",
             "error_type",
+            "tool",
+            "step_id",
+            "step_count",
         ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)

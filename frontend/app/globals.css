@@ -1594,3 +1594,17 @@ pre {
     padding: 30px 18px;
   }
 }
+
+.agent-steps { margin: 16px 0; padding: 16px; border: 1px solid var(--border, #deded8); border-radius: 12px; min-width: 0; }
+.agent-steps h3 { margin: 0 0 12px; font-size: 14px; }
+.agent-steps ol { padding-left: 22px; margin: 0; }
+.agent-steps li { padding: 8px 0; }
+.agent-steps p { margin: 6px 0; font-size: 13px; }
+.agent-step-heading { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.agent-status { font-size: 11px; padding: 2px 6px; border-radius: 5px; background: #efefea; }
+.agent-status.running { background: #fff0cb; color: #775100; }
+.agent-status.completed { background: #e1f2e7; color: #225d36; }
+.agent-status.failed { background: #ffe6e3; color: #972e21; }
+.agent-steps pre { max-height: 320px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-steps summary { cursor: pointer; font-size: 12px; }
+.result > p { white-space: pre-wrap; }

@@ -6,4 +6,5 @@ email-validator>=2.2,<3
 PyJWT>=2.10,<3
 pwdlib[argon2]>=0.2,<1
 openai>=2,<3
+pglast>=7,<8
 python-multipart>=0.0.22,<1

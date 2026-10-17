@@ -13,8 +13,18 @@ export type Cube = {
     warnings: string[];
   };
 };
+export type AgentStep = {
+  id: string;
+  tool: string;
+  status: "running" | "completed" | "failed";
+  purpose?: string;
+  arguments?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  duration_ms?: number;
+};
 export type Result = {
-  status: "answered" | "clarification";
+  status: "answered" | "clarification" | "error" | "limit_reached";
+  steps?: AgentStep[];
   answer: string;
   rows?: Record<string, unknown>[];
   columns?: { key: string; label: string }[];
@@ -28,6 +38,44 @@ export type Result = {
 };
 export type Message = { id: string; question: string; result: Result };
 export type Session = { id: string; cube_id: string; created_at: string };
+export async function askAgent(
+  session: string,
+  question: string,
+  onStep: (step: AgentStep) => void,
+): Promise<Result> {
+  const response = await fetch(`/api/chat/session/${session}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, stream: true }),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.detail || "Could not start the agent.");
+  }
+  if (!response.body) throw new Error("Agent stream is unavailable.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "step") onStep(event.step);
+        if (event.type === "result") return event.result;
+        if (event.type === "error") throw new Error(event.detail);
+      }
+      if (done) throw new Error("Agent connection ended before a final result. Retry your question.");
+    }
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+}
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? "GET" : "POST",

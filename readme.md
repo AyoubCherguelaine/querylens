@@ -2,7 +2,11 @@
 
 A PostgreSQL analytics workspace with a FastAPI backend and Next.js frontend. Upload a CSV or multi-table SQLite database, organize its tables under a file-named schema, reopen saved sources from the dashboard, and analyze actual query results with inspectable evidence.
 
-The language model **proposes a structured plan**. Python validates that plan and compiles parameterized PostgreSQL SQL. Answers are rendered from actual query results; the model never writes executable SQL or narrates invented results. This reduces fabrication risk but does not guarantee the model understood the question correctly. Review the plan, filters, and metric meaning.
+Chat uses a **conversational tool agent**. It receives the new question, the most recent 30 saved turns, prior SQL attempts and up to five result rows per query (history is capped at 100,000 characters). It can inspect the selected source, sample tables, run multiple SQL queries with joins and subqueries, recover from SQL errors, ask the user for clarification, and answer from observed results. The UI streams model/tool status, inputs, outputs and errors; completed traces are saved with the conversation and can be downloaded as evidence. Sampling offers explicit discovered table references and also resolves bare, schema-qualified, quoted, or unambiguous display names.
+
+Python parses agent SQL with PostgreSQL's parser and permits one SELECT over fully qualified tables discovered in the selected source. Queries use read-only transactions, a restricted search path, a built-in analytics function/cast/operator allowlist, statement timeouts and bounded cursor fetching. Writes, application/system tables, other sources, row locking and arbitrary functions are rejected. Use derived subqueries instead of CTE references. Model answers still require review against the displayed evidence. The direct structured-plan analysis and profiling actions remain available without a model.
+
+Source schemas, row samples and query results are sent to the configured model (`store=False`). Live tool results sent to the model include up to 20 rows; history includes up to five per query. The UI retains up to `MAX_RESULT_ROWS` per query, at most 128 columns, with cells clipped at 4,000 characters and truncation flagged.
 
 ## Local setup
 
@@ -23,9 +27,10 @@ Edit `.env`:
 - `ANALYTICS_DATABASE_URL`: PostgreSQL source URL. Blank uses `DATABASE_URL`. A separate read-only source role is recommended.
 - `ANALYTICS_SCHEMAS`: JSON allowlist for existing PostgreSQL schemas, for example `["analytics"]`. Imported sources are authorized by ownership and do not need to be added here. Application and PostgreSQL system schemas are rejected.
 - `JWT_SECRET`: a random secret of at least 32 characters (`openssl rand -hex 32`).
-- `OPENAI_API_KEY`: needed only for natural-language planning.
-- `OPENAI_MODEL`: explicit model supporting Structured Outputs; defaults to `gpt-4o-mini`. There is no silent model fallback. Account access is checked by the provider at request time.
-- `QUERY_TIMEOUT_MS`, `MAX_RESULT_ROWS`, `LLM_TIMEOUT_SECONDS`: execution limits.
+- `OPENAI_API_KEY`: needed for the conversational agent and natural-language planning.
+- `OPENAI_MODEL`: explicit model supporting function calling and Structured Outputs; defaults to `gpt-4o-mini`. There is no silent model fallback. Account access is checked by the provider at request time.
+- `QUERY_TIMEOUT_MS`, `MAX_RESULT_ROWS`, `LLM_TIMEOUT_SECONDS`: query/result and per-model-request limits.
+- `AGENT_MAX_STEPS`, `AGENT_TIMEOUT_SECONDS`: tool/model round limit (default 12) and total agent time limit (default 180 seconds). The agent returns partial evidence on limit/provider failures.
 - `ALLOW_SIGNUP`: disable public registration after provisioning accounts if needed.
 - `LOG_LEVEL`, `TOKEN_MINUTES`: logging and session lifetime.
 - `UPLOAD_MAX_BYTES`, `IMPORT_MAX_ROWS`, `IMPORT_MAX_TABLES`, `IMPORT_MAX_COLUMNS`, `IMPORT_TIMEOUT_MS`, `MAX_IMPORTED_SOURCES`: import limits (defaults: 25 MiB, 100,000 total rows, 50 tables, 128 columns per table, 60-second SQL timeout, 50 saved imports per account). Match `UPLOAD_MAX_BYTES` in the frontend environment; Compose passes it automatically.
@@ -78,7 +83,7 @@ Views, virtual tables, generated columns, triggers, defaults, CHECK constraints,
 
 Existing PostgreSQL schemas are available through **Use this schema** when they are in `ANALYTICS_SCHEMAS` and contain accessible ordinary tables. The source is registered once and can be reopened later. Imported sources live in the application’s PostgreSQL database; existing sources use the configured analytics connection. A new migration backfills source records for legacy saved cubes, preserving their IDs and chat sessions.
 
-Analysis is scoped to the chosen source and table. Importing SQLite foreign keys preserves relationships in PostgreSQL; it does not enable unrestricted cross-table SQL or guessed joins. Numeric measures still require business review. Source dashboards contain real counts and metadata; no model generates their values.
+Agent analysis is scoped to the chosen source and can query its discovered tables, including joins. The chosen table provides the initial focus. Direct structured-plan analysis remains scoped to one table. Importing SQLite foreign keys preserves relationships in PostgreSQL. Numeric measures still require business review. Source dashboards contain real counts and metadata; no model generates their values.
 
 ## Temporary demo
 
@@ -123,6 +128,8 @@ backend/
     compiler.py              Closed analytical language → parameterized SQL
     planner.py, prompts.py   Structured model planning and refusal handling
     analysis.py              Query execution, profiling, result evidence
+    chat_agent.py            Conversational tool loop, history and step events
+    agent_sql.py             PostgreSQL AST validation and bounded SQL execution
     import_parser.py         Bounded CSV/SQLite parsing and type/key inspection
     sources.py               Source registry and atomic schema/table imports
 migrations/                  Versioned PostgreSQL DDL
@@ -134,7 +141,7 @@ agents/                      Legacy class import paths, backed by the new servic
 
 PostgreSQL stores users, owned source records and import manifests, cube definitions as JSONB, sessions, and immutable message results. UUID identities and foreign keys replace MongoDB ObjectIds. Passwords use Argon2; JWTs require an expiry, subject, and audience. Source/cube/session operations enforce ownership. Imported schemas are private to their owner. Existing configured analytics schemas are shared with registered analysts: saved-object ownership is **not** row-level source isolation for those shared schemas. Use separate deployments/source credentials for different data access boundaries.
 
-Structured logs go to stdout as JSON with request IDs, status, latency, model/token usage, and result counts. Responses carry `X-Request-ID`. Logs intentionally exclude passwords, tokens, DSNs, prompts, filter values, result rows, and provider error bodies. SQL parameters and query results are stored as private session evidence in PostgreSQL, so apply your normal database retention and access policy.
+Structured logs go to stdout as JSON with request IDs, status, latency, model/token usage, and result counts. Agent step logs include the tool name, step ID, completion/failure status and duration; inspect failed tool details in the private conversation evidence. Responses carry `X-Request-ID`. Logs intentionally exclude passwords, tokens, DSNs, prompts, filter values, result rows, and provider error bodies. SQL parameters and query results are stored as private session evidence in PostgreSQL, so apply your normal database retention and access policy.
 
 ## Cubes and supported analysis
 
@@ -147,11 +154,11 @@ Discovery reads real table columns, PostgreSQL types, primary/foreign/unique key
 - Sorting: validated output aliases with stable secondary group ordering.
 - Limits: fetch one additional group to detect truncation; no misleading full-result totals from a limited result.
 - Decimal values and integers beyond JavaScript’s safe range: returned as strings to preserve precision. NULL stays NULL; counts retain PostgreSQL semantics.
-- Profiling: exact row count, NULL count, distinct count for up to 64 supported fields, bounded by statement timeout. No samples are sent to the model.
+- Profiling: exact row count, NULL count, distinct count for up to 64 supported fields, bounded by statement timeout. This direct action does not call a model.
 
-Queries run inside read-only transactions with statement timeouts. Only server-discovered tables/columns and fixed aggregate/date functions reach SQL. Unknown fields, unsupported metrics, invalid sorting, stale schemas, provider refusal, incomplete plans, and unavailable providers fail explicitly. Natural-language questions are independent; chat history is for review, not implicit conversational context.
+Direct structured-plan queries run inside read-only transactions with statement timeouts. Only server-discovered tables/columns and fixed aggregate/date functions reach compiled SQL. Unknown fields, unsupported metrics, invalid sorting, stale schemas, provider refusal, incomplete plans, and unavailable providers fail explicitly. Natural-language chat uses saved conversation and SQL evidence as context for follow-up questions.
 
-Numeric columns are candidates, not certified business measures: an exchange rate, balance, or percentage should not automatically be summed. Review units and additivity. The current scope excludes joins, currency conversion, fiscal calendars, derived business metrics, forecasting, OR filters, and arbitrary SQL. PostgreSQL planner row estimates can be stale; profiling computes exact counts.
+Numeric columns are candidates, not certified business measures: an exchange rate, balance, or percentage should not automatically be summed. Review units and additivity. The structured-plan API excludes joins, currency conversion, fiscal calendars, derived business metrics, forecasting, OR filters, and arbitrary SQL. The conversational agent can express joins, formulas and OR filters through validated SELECT SQL within its source; business definitions still need user confirmation. PostgreSQL planner row estimates can be stale; profiling computes exact counts.
 
 ## API examples
 
@@ -173,7 +180,7 @@ Sign up and log in at `/users/signup` and `/users/login`. Send the returned toke
 | `POST /chat/session` | Create session with `{ "cube_id": "UUID" }` |
 | `GET /chat/sessions` | Latest 100 owned sessions |
 | `GET /chat/session/{id}` | First 200 messages with stored evidence |
-| `POST /chat/session/{id}/messages` | Ask `{ "question": "Count rows by region" }` |
+| `POST /chat/session/{id}/messages` | Ask `{ "question": "Count rows by region", "stream": true }` for NDJSON progress, or omit `stream` for a final JSON result |
 
 Example body for `/cubes/{id}/analyze`:
 
@@ -191,7 +198,7 @@ Example body for `/cubes/{id}/analyze`:
 }
 ```
 
-Group aliases are `g0`, `g1`, … and metric aliases are `m0`, `m1`, …. If the question cannot be grounded, the chat endpoint returns `status: "clarification"`. Configuration/provider outages return 503; invalid plans return 422; timed-out analysis returns 504. Errors never substitute fabricated answers.
+Group aliases are `g0`, `g1`, … and metric aliases are `m0`, `m1`, …. If the agent needs more information, the chat endpoint returns `status: "clarification"`; the next user message continues the conversation. Agent results use `answered`, `clarification`, `error` or `limit_reached` and include `steps`. Streaming events are `step`, `heartbeat`, `result` or `error`. Missing provider configuration returns 503 before streaming; provider/time-limit failures during an agent run return an error result with partial evidence. Direct-plan validation returns 422 and timed-out direct analysis returns 504.
 
 ## Verification
 
@@ -218,4 +225,4 @@ This is an intentional storage/API upgrade. MongoDB, Gradio, CrewAI, and LangCha
 
 Existing MongoDB data is **not automatically migrated**. Export it before decommissioning the old service, explicitly map ObjectIds to UUIDs and ownership references, and validate the import. Legacy JWTs and sessions are not accepted. Rediscover cubes from the PostgreSQL source; an old SQLite database can be uploaded through the new import dashboard. Existing source records are never rewritten by discovery or analysis.
 
-Implementation references: [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [PostgreSQL read-only transactions](https://www.postgresql.org/docs/16/sql-set-transaction.html), and [Next.js cookie handling](https://nextjs.org/docs/app/api-reference/functions/cookies).
+Implementation references: [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling), [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [PostgreSQL read-only transactions](https://www.postgresql.org/docs/16/sql-set-transaction.html), and [Next.js cookie handling](https://nextjs.org/docs/app/api-reference/functions/cookies).

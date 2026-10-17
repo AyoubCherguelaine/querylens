@@ -184,17 +184,27 @@ def test_chat_persistence_refusal_and_provider_failure(client, monkeypatch):
         client.post(endpoint, headers=headers, json={"question": "count rows"}).status_code == 503
     )
 
-    async def planned(*args):
-        return plan()
+    # Enable the mocked provider only after checking missing-key behavior.
+    from pydantic import SecretStr
 
-    monkeypatch.setattr("backend.api.analytics.make_plan", planned)
+    client.app.state.settings.openai_api_key = SecretStr("test-key")
+
+    async def planned(pool, settings, definition, question, history, emit):
+        from backend.services.analysis import execute_plan
+
+        assert history == []
+        return await execute_plan(pool, settings, definition, plan())
+
+    monkeypatch.setattr("backend.api.analytics.run_agent", planned)
     response = client.post(endpoint, headers=headers, json={"question": "count rows"})
     assert response.status_code == 200 and response.json()["rows"] == [{"m0": 4}]
 
-    async def clarify(*args):
-        return plan(clarification="Which business metric?")
+    async def clarify(pool, settings, definition, question, history, emit):
+        assert history[0]["question"] == "count rows"
+        assert history[0]["result"]["sql"]
+        return {"status": "clarification", "answer": "Which business metric?"}
 
-    monkeypatch.setattr("backend.api.analytics.make_plan", clarify)
+    monkeypatch.setattr("backend.api.analytics.run_agent", clarify)
     assert (
         client.post(endpoint, headers=headers, json={"question": "profit?"}).json()["status"]
         == "clarification"
@@ -246,3 +256,62 @@ async def test_readonly_timeout_and_pool_recovery():
             assert await connection.fetchval("SELECT to_regclass('must_not_exist')") is None
     finally:
         await pool.close()
+
+
+def test_agent_stream_tools_history_and_source_scope(client, monkeypatch):
+    """Exercise actual source SQL with a deterministic model tool sequence."""
+    import json
+    from unittest.mock import AsyncMock
+
+    from pydantic import SecretStr
+
+    from tests.test_chat_agent import response
+
+    headers = account(client)
+    cube_id = discover(client, headers)
+    session = client.post("/chat/session", headers=headers, json={"cube_id": cube_id}).json()["id"]
+    client.app.state.settings.openai_api_key = SecretStr("test-key")
+    provider = AsyncMock()
+    provider.__aenter__.return_value = provider
+    provider.responses.create.side_effect = [
+        response("source_schema", {"purpose": "Inspect source"}, 0),
+        response("sample_table", {"table": "sales", "purpose": "Preview sales"}, 1),
+        response(
+            "query_postgres",
+            {"sql": "SELECT * FROM chat_olap.users", "purpose": "Invalid query"},
+            2,
+        ),
+        response(
+            "query_postgres",
+            {"sql": "SELECT sum(amount) AS total FROM business.sales", "purpose": "Sum sales"},
+            3,
+        ),
+        response("finish", {"answer": "Total sales are 60.6006."}, 4),
+        response("ask_user", {"question": "Which period should I compare?"}, 5),
+    ]
+    monkeypatch.setattr("backend.services.chat_agent.AsyncOpenAI", lambda **kw: provider)
+    endpoint = f"/chat/session/{session}/messages"
+    stream = client.post(
+        endpoint, headers=headers, json={"question": "total sales", "stream": True}
+    )
+    assert stream.status_code == 200
+    assert "application/x-ndjson" in stream.headers["content-type"]
+    events = [json.loads(line) for line in stream.text.splitlines()]
+    result = events[-1]["result"]
+    assert result["rows"] == [{"total": "60.6006"}]
+    tools = [s for s in result["steps"] if s["tool"] != "model"]
+    assert [s["status"] for s in tools] == [
+        "completed",
+        "completed",
+        "failed",
+        "completed",
+        "completed",
+    ]
+    assert tools[1]["output"]["truncated"] is True
+    assert any(e.get("step", {}).get("status") == "running" for e in events)
+    followup = client.post(endpoint, headers=headers, json={"question": "compare that"})
+    assert followup.json()["status"] == "clarification"
+    context = json.loads(provider.responses.create.call_args.kwargs["input"][0]["content"])
+    assert context["history"][0]["queries"][-1]["result"]["rows"] == [{"total": "60.6006"}]
+    saved = client.get(f"/chat/session/{session}", headers=headers).json()["messages"]
+    assert len(saved) == 2 and saved[0]["result"]["steps"] == result["steps"]

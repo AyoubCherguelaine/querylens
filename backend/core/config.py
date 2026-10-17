@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
     llm_timeout_seconds: int = Field(default=40, ge=1, le=120)
+    agent_max_steps: int = Field(default=12, ge=1, le=40)
+    agent_timeout_seconds: int = Field(default=180, ge=10, le=600)
     query_timeout_ms: int = Field(default=10000, ge=100, le=60000)
     max_result_rows: int = Field(default=200, ge=1, le=1000)
     log_level: str = "INFO"

@@ -1,12 +1,17 @@
+import asyncio
+import json
+from contextlib import suppress
 from uuid import UUID, uuid4
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from backend.api.dependencies import cube_pool, current_user, owned_cube
 from backend.schemas import Analysis, Question, SessionCreate
 from backend.services.analysis import execute_plan
-from backend.services.planner import PlannerUnavailable, make_plan
+from backend.services.chat_agent import run_agent
+from backend.services.planner import PlannerUnavailable
 from backend.services.sources import available_definitions, connect_existing
 
 router = APIRouter(tags=["Analytics"])
@@ -107,20 +112,74 @@ async def history(session_id: UUID, request: Request, user=Depends(current_user)
 async def ask(session_id: UUID, body: Question, request: Request, user=Depends(current_user)):
     session = await owned_session(request, session_id, user["id"])
     cube = await owned_cube(request, session["cube_id"], user["id"])
-    try:
-        plan = await make_plan(cube["definition"], body.question, request.app.state.settings)
-    except PlannerUnavailable as error:
-        raise HTTPException(503, str(error))
-    result = await run(request, cube["definition"], plan, cube_pool(request, cube))
+    settings = request.app.state.settings
+    if not settings.openai_api_key.get_secret_value():
+        raise HTTPException(503, "Configure OPENAI_API_KEY to use the conversational agent.")
     async with request.app.state.db.acquire() as connection:
-        await connection.execute(
-            "INSERT INTO chat_olap.messages(id,session_id,question,result) VALUES($1,$2,$3,$4)",
-            uuid4(),
+        previous = await connection.fetch(
+            """SELECT question,result FROM (
+                SELECT question,result,created_at,id FROM chat_olap.messages
+                WHERE session_id=$1 ORDER BY created_at DESC,id DESC LIMIT 30
+            ) recent ORDER BY created_at,id""",
             session_id,
-            body.question,
-            result,
         )
-    return result
+
+    async def execute(emit=None):
+        try:
+            result = await run_agent(
+                cube_pool(request, cube),
+                settings,
+                cube["definition"],
+                body.question,
+                previous,
+                emit,
+            )
+        except PlannerUnavailable as error:
+            raise HTTPException(503, str(error))
+        async with request.app.state.db.acquire() as connection:
+            await connection.execute(
+                "INSERT INTO chat_olap.messages(id,session_id,question,result) VALUES($1,$2,$3,$4)",
+                uuid4(),
+                session_id,
+                body.question,
+                result,
+            )
+        return result
+
+    if not body.stream:
+        return await execute()
+
+    async def events():
+        queue = asyncio.Queue()
+
+        async def produce():
+            try:
+                result = await execute(queue.put)
+                await queue.put({"type": "result", "result": result})
+            except Exception:
+                await queue.put({"type": "error", "detail": "Agent request failed. Please retry."})
+
+        task = asyncio.create_task(produce())
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=10)
+                except TimeoutError:
+                    yield json.dumps({"type": "heartbeat"}) + "\n"
+                    continue
+                yield json.dumps(event, default=str) + "\n"
+                if event["type"] in {"result", "error"}:
+                    break
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/cubes/{cube_id}/profile")

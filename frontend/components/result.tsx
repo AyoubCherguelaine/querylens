@@ -1,5 +1,6 @@
 import { CheckCircle2, Download, Info } from "lucide-react";
 import type { Result } from "@/lib/api";
+import { AgentSteps } from "./agent-steps";
 
 export function AnalysisResult({ result }: { result: Result }) {
   function download() {
@@ -23,14 +24,15 @@ export function AnalysisResult({ result }: { result: Result }) {
         )}
         <span>
           {result.status === "answered"
-            ? "Query result"
-            : "A little more context"}
+            ? "Answer"
+            : result.status === "clarification" ? "A little more context" : "Agent stopped"}
         </span>
         {result.duration_ms !== undefined && (
           <small>{result.duration_ms} ms</small>
         )}
       </div>
       <p>{result.answer}</p>
+      <AgentSteps steps={result.steps || []} />
       {!!result.rows?.length && (
         <div className="table-scroll">
           <table>
@@ -64,7 +66,7 @@ export function AnalysisResult({ result }: { result: Result }) {
           Result limit reached. Narrow your filters to see a complete result.
         </p>
       )}
-      {result.sql && (
+      {(result.sql || result.steps?.length) && (
         <>
           <div className="evidence">
             <details>

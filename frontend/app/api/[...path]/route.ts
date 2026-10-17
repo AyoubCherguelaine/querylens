@@ -72,10 +72,21 @@ async function proxy(
         },
         body,
         cache: "no-store",
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(660000),
         redirect: "error",
       },
     );
+    if (upstream.headers.get("content-type")?.includes("application/x-ndjson")) {
+      return new NextResponse(upstream.body, {
+        status: upstream.status,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Cache-Control": "no-store",
+          "X-Accel-Buffering": "no",
+          "X-Request-ID": upstream.headers.get("X-Request-ID") || "",
+        },
+      });
+    }
     const data = await upstream.json();
     if (path === "users/login" && upstream.ok) {
       jar.set("olap_session", data.access_token, {
