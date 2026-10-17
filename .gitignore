@@ -8,4 +8,15 @@ __pycache__
 venv
 launch.json
 
-labs/*
+labs/*.venv/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+.next/
+*.tsbuildinfo
+.env.*
+!.env.example
+coverage/
+/labs/
+/output/
+.playwright-cli/

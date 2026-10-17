@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chat_olap
+      POSTGRES_USER: chat_olap
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat_olap -d chat_olap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://chat_olap:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/chat_olap
+      ANALYTICS_DATABASE_URL: ${DOCKER_ANALYTICS_DATABASE_URL:-}
+    ports:
+      - "127.0.0.1:8001:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready')"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+  web:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://api:8001
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-26214400}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3001}
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  postgres_data:

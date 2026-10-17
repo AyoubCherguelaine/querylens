@@ -1,7 +1,9 @@
-langchain_openai 
-crewai 
-pymongo 
-python-jose[cryptography] 
-passlib[bcrypt]
-fastapi[standard]
-
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+asyncpg>=0.30,<1
+pydantic-settings>=2.8,<3
+email-validator>=2.2,<3
+PyJWT>=2.10,<3
+pwdlib[argon2]>=0.2,<1
+openai>=2,<3
+python-multipart>=0.0.22,<1

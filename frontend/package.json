@@ -1,0 +1,23 @@
+{
+  "name": "chat-olap-web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "node scripts/start.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "^0.577.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}
