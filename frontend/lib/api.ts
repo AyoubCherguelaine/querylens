@@ -91,6 +91,11 @@ export async function askAgent(
       buffer += decoder.decode(value, { stream: !done });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
+      // A valid final NDJSON record may arrive without a trailing newline.
+      if (done && buffer.trim()) {
+        lines.push(buffer);
+        buffer = "";
+      }
       for (const line of lines) {
         if (!line.trim()) continue;
         const event = JSON.parse(line);

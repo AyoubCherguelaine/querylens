@@ -56,6 +56,7 @@ export function Workspace() {
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
   const conversation = useRef<HTMLDivElement>(null);
+  const messageSequence = useRef(0);
   const [selectedSource, setSelectedSource] = useState("");
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [overview, setOverview] = useState<SourceOverview>({
@@ -235,6 +236,14 @@ export function Workspace() {
       setBusy(false);
     }
   }
+  function appendMessage(question: string, result: Result) {
+    const message = {
+      id: `local-${++messageSequence.current}`,
+      question,
+      result,
+    };
+    setMessages((previous) => [...previous, message]);
+  }
   async function ask(event: React.FormEvent) {
     event.preventDefault();
     if (busy || !question.trim() || !cube) return;
@@ -260,10 +269,7 @@ export function Workspace() {
             : [...previous, step];
         });
       });
-      setMessages((previous) => [
-        ...previous,
-        { id: crypto.randomUUID(), question: text, result },
-      ]);
+      appendMessage(text, result);
       setQuestion("");
       setAgentSteps([]);
       setSessions(await api<Session[]>("chat/sessions"));
@@ -290,14 +296,7 @@ export function Workspace() {
           limit: 1,
         },
       });
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: crypto.randomUUID(),
-          question: t.countRowsQuestion,
-          result,
-        },
-      ]);
+      appendMessage(t.countRowsQuestion, result);
       setTab("analysis");
     } catch (e) {
       setError((e as Error).message);
@@ -311,10 +310,7 @@ export function Workspace() {
     setError("");
     try {
       const result = await api<Result>(`cubes/${cube.id}/profile`, {});
-      setMessages((previous) => [
-        ...previous,
-        { id: crypto.randomUUID(), question: t.profileQuestion, result },
-      ]);
+      appendMessage(t.profileQuestion, result);
       setTab("analysis");
     } catch (error) {
       setError((error as Error).message);
@@ -494,7 +490,7 @@ export function Workspace() {
               />
             </>
           ) : (
-            <>
+            <section className={cube ? "analysis-panel" : "analysis-empty"}>
               <div className="page-heading">
                 <div>
                   <span className="eyebrow">{t.eyebrow}</span>
@@ -700,7 +696,7 @@ export function Workspace() {
                       ))}
                     </section>
                   ) : (
-                    <section className="analysis-panel">
+                    <div className="chat-body">
                       <div className="conversation" ref={conversation}>
                         {!messages.length && !pendingQuestion ? (
                           <div className="conversation-empty">
@@ -824,11 +820,11 @@ export function Workspace() {
                         </form>
                         <p className="composer-note">{t.composerNote}</p>
                       </div>
-                    </section>
+                    </div>
                   )}
                 </>
               )}
-            </>
+            </section>
           )}
         </div>
       </main>
