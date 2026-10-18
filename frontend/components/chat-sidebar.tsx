@@ -40,6 +40,15 @@ export function ChatSidebar({
   const { t: dictionary, intl } = useT();
   const t = dictionary.chats;
   const [chatSearch, setChatSearch] = useState("");
+  function sessionName(item: Session) {
+    const ids = item.cube_ids?.length ? item.cube_ids : [item.cube_id];
+    return (
+      ids
+        .map((id) => cubes.find((c) => c.id === id)?.definition.name)
+        .filter(Boolean)
+        .join(" + ") || t.fallbackName
+    );
+  }
   return (
     <aside
       id="chat-sidebar"
@@ -97,12 +106,7 @@ export function ChatSidebar({
       <div className="session-list">
         {sessions
           .filter((item) =>
-            (
-              cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-              t.fallbackName
-            )
-              .toLowerCase()
-              .includes(chatSearch.toLowerCase()),
+            sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
           )
           .map((item) => (
             <Button
@@ -116,8 +120,7 @@ export function ChatSidebar({
             >
               <MessageSquare size={16} />
               <span>
-                {cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-                  t.fallbackName}
+                {sessionName(item)}
                 <small>
                   {new Date(item.created_at).toLocaleDateString(intl, {
                     month: "short",
@@ -136,12 +139,7 @@ export function ChatSidebar({
         )}
         {!!sessions.length &&
           !sessions.some((item) =>
-            (
-              cubes.find((c) => c.id === item.cube_id)?.definition.name ||
-              t.fallbackName
-            )
-              .toLowerCase()
-              .includes(chatSearch.toLowerCase()),
+            sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
           ) && <p className="sidebar-hint">{t.noMatch}</p>}
       </div>
       <div className="sidebar-bottom">

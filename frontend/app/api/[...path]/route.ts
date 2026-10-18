@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 const routes =
-  /^(users\/(login|signup|me)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/messages)?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|health\/ready)$/;
+  /^(users\/(login|signup|me)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/(messages|tables))?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|health\/ready)$/;
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
@@ -76,7 +76,9 @@ async function proxy(
         redirect: "error",
       },
     );
-    if (upstream.headers.get("content-type")?.includes("application/x-ndjson")) {
+    if (
+      upstream.headers.get("content-type")?.includes("application/x-ndjson")
+    ) {
       return new NextResponse(upstream.body, {
         status: upstream.status,
         headers: {

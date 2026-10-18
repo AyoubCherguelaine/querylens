@@ -8,9 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from backend.api.dependencies import cube_pool, current_user, owned_cube
-from backend.schemas import Analysis, Question, SessionCreate
+from backend.schemas import Analysis, Question, SessionCreate, SessionTables
 from backend.services.analysis import execute_plan
 from backend.services.chat_agent import run_agent
+from backend.services.chat_scope import resolve_cubes, save_tables, table_ids
 from backend.services.planner import PlannerUnavailable
 from backend.services.sources import available_definitions, connect_existing
 
@@ -61,7 +62,7 @@ async def run(request, definition, plan, pool=None):
 
 @router.post("/chat/session", status_code=201)
 async def new_session(body: SessionCreate, request: Request, user=Depends(current_user)):
-    await owned_cube(request, body.cube_id, user["id"])
+    selected = await resolve_cubes(request, user["id"], body.cube_id, body.cube_ids)
     limit = request.app.state.settings.max_chat_sessions
     session_id = uuid4()
     async with request.app.state.db.acquire() as connection:
@@ -81,14 +82,18 @@ async def new_session(body: SessionCreate, request: Request, user=Depends(curren
                 user["id"],
                 body.cube_id,
             )
-    return {"id": session_id, "cube_id": body.cube_id}
+            await save_tables(connection, session_id, selected)
+    return {"id": session_id, "cube_id": body.cube_id, "cube_ids": [c["id"] for c in selected]}
 
 
 @router.get("/chat/sessions")
 async def sessions(request: Request, user=Depends(current_user)):
     async with request.app.state.db.acquire() as connection:
         rows = await connection.fetch(
-            "SELECT id,cube_id,created_at FROM chat_olap.sessions WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100",
+            """SELECT id,cube_id,created_at,
+                ARRAY(SELECT sc.cube_id FROM chat_olap.session_cubes sc
+                      WHERE sc.session_id=s.id ORDER BY sc.position) AS cube_ids
+                FROM chat_olap.sessions s WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100""",
             user["id"],
         )
     return [dict(row) for row in rows]
@@ -115,14 +120,33 @@ async def history(session_id: UUID, request: Request, user=Depends(current_user)
     return {
         "id": session_id,
         "cube_id": session["cube_id"],
+        "cube_ids": await table_ids(request, session),
         "messages": [dict(m) for m in messages],
     }
+
+
+@router.post("/chat/session/{session_id}/tables")
+async def update_tables(
+    session_id: UUID, body: SessionTables, request: Request, user=Depends(current_user)
+):
+    session = await owned_session(request, session_id, user["id"])
+    selected = await resolve_cubes(request, user["id"], session["cube_id"], body.cube_ids)
+    async with request.app.state.db.acquire() as connection:
+        async with connection.transaction():
+            await connection.execute(
+                "SELECT 1 FROM chat_olap.sessions WHERE id=$1 FOR UPDATE", session_id
+            )
+            await save_tables(connection, session_id, selected)
+    return {"cube_ids": [c["id"] for c in selected]}
 
 
 @router.post("/chat/session/{session_id}/messages")
 async def ask(session_id: UUID, body: Question, request: Request, user=Depends(current_user)):
     session = await owned_session(request, session_id, user["id"])
-    cube = await owned_cube(request, session["cube_id"], user["id"])
+    selected = await resolve_cubes(
+        request, user["id"], session["cube_id"], await table_ids(request, session)
+    )
+    cube = selected[0]
     settings = request.app.state.settings
     if not settings.openai_api_key.get_secret_value():
         raise HTTPException(503, "Configure OPENAI_API_KEY to use the conversational agent.")
@@ -151,9 +175,11 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 body.question,
                 previous,
                 emit,
+                selected_cubes=[c["definition"] for c in selected],
             )
         except PlannerUnavailable as error:
             raise HTTPException(503, str(error))
+        result["cube_ids"] = [str(c["id"]) for c in selected]
         async with request.app.state.db.acquire() as connection:
             async with connection.transaction():
                 # Re-check under a session lock: concurrent questions may have landed meanwhile.

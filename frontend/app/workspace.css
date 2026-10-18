@@ -1154,3 +1154,263 @@
   white-space: normal;
   min-width: 80px;
 }
+
+/* The additional-table selector stays in the compact chat header. */
+.workspace .chat-tables {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.workspace .analysis-panel .cube-title {
+  flex-wrap: wrap;
+}
+.chat-table-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(320px, 25vw);
+  overflow-x: auto;
+}
+.chat-table-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.workspace .chat-table-chip button {
+  min-height: 24px;
+}
+.workspace .add-chat-table {
+  min-height: 28px;
+  flex: none;
+}
+.chat-table-picker {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 24px));
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 35px #23385720;
+  font-size: 12px;
+}
+.chat-table-picker [data-slot="popover-title"] {
+  font-weight: 600;
+  font-size: 14px;
+}
+.chat-table-picker [data-slot="popover-description"] {
+  margin: 0;
+  font-size: 12px;
+}
+.chat-table-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.chat-table-search input {
+  min-width: 0;
+  font-size: 12px;
+}
+.chat-table-options {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.chat-table-option {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  white-space: normal;
+}
+.chat-table-option:hover {
+  background: var(--soft);
+}
+.chat-table-option > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.chat-table-option strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.chat-table-option small {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.chat-table-option > small {
+  margin-inline-start: auto;
+}
+.chat-table-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+}
+.workspace .composer-footer > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .chat-table-chips {
+    max-width: 42vw;
+  }
+}
+
+/* Open conversation layout: the composer owns the table context. */
+.workspace .chat-mode > .page-heading,
+.workspace .chat-mode > .cube-overview {
+  display: none;
+}
+.workspace .chat-mode {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.workspace .chat-mode > .tabs {
+  padding-inline: 20px;
+}
+.workspace .chat-mode .conversation {
+  padding: 28px 32px;
+}
+.workspace .chat-messages {
+  width: 100%;
+  max-width: 1000px;
+  margin-inline: auto;
+  gap: 36px;
+}
+.workspace .chat-messages .result {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 15px;
+  line-height: 1.8;
+}
+.workspace .chat-messages .result > .table-scroll {
+  max-height: 260px;
+  margin-bottom: 16px;
+}
+.workspace .chat-messages .agent-steps {
+  padding: 0;
+  margin: 0 0 12px;
+  border: 0;
+  border-radius: 0;
+}
+.workspace .chat-mode .composer-wrap {
+  padding: 12px 32px 10px;
+  border: 0;
+}
+.workspace .chat-mode .composer-wrap > form,
+.workspace .chat-mode .composer-note {
+  width: 100%;
+  max-width: 1000px;
+  margin-inline: auto;
+}
+.workspace .chat-mode .composer {
+  border-radius: 20px;
+  background: #f9fafc;
+}
+.workspace .chat-mode .composer textarea {
+  min-height: 44px;
+  padding: 12px 16px 4px;
+  font-size: 14px;
+}
+.workspace .chat-mode .composer-footer {
+  padding: 4px 10px 10px;
+  gap: 8px;
+}
+.workspace .chat-mode .send-button {
+  border-radius: 50%;
+  flex: none;
+}
+.workspace .composer-footer .chat-tables {
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+.workspace .composer-footer .add-chat-table {
+  order: -1;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.workspace .composer-footer .chat-table-chips {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+.workspace .composer-footer .chat-table-chip {
+  min-height: 26px;
+}
+/* Keep the schema available as a drawer so replies have the full center width. */
+.workspace .schema-sidebar {
+  display: none;
+  position: fixed;
+  inset-block: 0;
+  inset-inline: auto 0;
+  width: min(340px, 88vw);
+  z-index: 30;
+  box-shadow: -12px 0 45px #1c2d4c18;
+}
+.workspace .schema-sidebar.is-open {
+  display: flex;
+}
+.workspace .schema-toggle {
+  display: inline-flex;
+}
+.workspace .schema-sidebar .drawer-close {
+  display: grid;
+}
+.panel-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: #17233b55;
+  backdrop-filter: blur(2px);
+  z-index: 25;
+}
+@media (min-width: 901px) {
+  .workspace {
+    grid-template-columns: var(--chat-width) minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .workspace .chat-mode > .tabs {
+    padding-inline: 12px;
+  }
+  .workspace .chat-mode .conversation {
+    padding: 20px 12px;
+  }
+  .workspace .chat-mode .composer-wrap {
+    padding: 8px 4px;
+  }
+  .workspace .chat-messages .result {
+    font-size: 14px;
+  }
+}

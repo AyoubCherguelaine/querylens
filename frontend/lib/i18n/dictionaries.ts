@@ -295,6 +295,17 @@ const en = {
     moreHint: "CSV, SQLite, or PostgreSQL",
     add: "Add a data source",
   },
+  chatTables: {
+    add: "Add a table to this chat",
+    title: "Chat with multiple tables",
+    description: "Select tables to join, compare, or use in subqueries.",
+    selected: "Chat tables",
+    search: "Search tables or cubes…",
+    primary: "Main table",
+    remove: (name: string) => `Remove ${name} from this chat`,
+    noMatch: "No matching tables.",
+    hint: "Up to 20 tables on the same database connection. Changes apply to your next question.",
+  },
   result: {
     answer: "Answer",
     clarification: "A little more context",
@@ -684,6 +695,18 @@ const ar: Dictionary = {
     more: "أضف مزيدًا من البيانات",
     moreHint: "CSV أو SQLite أو PostgreSQL",
     add: "إضافة مصدر بيانات",
+  },
+  chatTables: {
+    add: "إضافة جدول إلى المحادثة",
+    title: "تحدث مع عدة جداول",
+    description:
+      "اختر جداول لربطها أو مقارنتها أو استخدامها في استعلامات فرعية.",
+    selected: "جداول المحادثة",
+    search: "ابحث عن جدول أو مكعب…",
+    primary: "الجدول الأساسي",
+    remove: (name: string) => `إزالة ${name} من المحادثة`,
+    noMatch: "لا توجد جداول مطابقة.",
+    hint: "حتى 20 جدولًا على نفس اتصال قاعدة البيانات. تُطبّق التغييرات على سؤالك التالي.",
   },
   result: {
     answer: "الإجابة",

@@ -1,7 +1,8 @@
 import { defaultLocale, dictionaries, isLocale } from "./i18n/dictionaries";
 
 function errors() {
-  const lang = typeof document === "undefined" ? "" : document.documentElement.lang;
+  const lang =
+    typeof document === "undefined" ? "" : document.documentElement.lang;
   return dictionaries[isLocale(lang) ? lang : defaultLocale].errors;
 }
 
@@ -20,9 +21,28 @@ export type Cube = {
     classification_reason?: string;
     time_dimensions?: string[];
     suggested_questions?: string[];
-    joins?: { path: string; schema: string; table: string; cardinality: string; evidence: string }[];
-    measures: { field: string | null; aggregation: string; label?: string; description?: string; additivity?: string }[];
-    fields: { name: string; type: string; key: boolean; nullable: boolean; role?: string; description?: string }[];
+    joins?: {
+      path: string;
+      schema: string;
+      table: string;
+      cardinality: string;
+      evidence: string;
+    }[];
+    measures: {
+      field: string | null;
+      aggregation: string;
+      label?: string;
+      description?: string;
+      additivity?: string;
+    }[];
+    fields: {
+      name: string;
+      type: string;
+      key: boolean;
+      nullable: boolean;
+      role?: string;
+      description?: string;
+    }[];
     warnings: string[];
   };
 };
@@ -54,7 +74,11 @@ export type Result = {
   steps?: AgentStep[];
   answer: string;
   report?: WrittenReport;
-  error?: { error: string; code: string; diagnostics?: Record<string, unknown> };
+  error?: {
+    error: string;
+    code: string;
+    diagnostics?: Record<string, unknown>;
+  };
   rows?: Record<string, unknown>[];
   columns?: { key: string; label: string }[];
   sql?: string;
@@ -66,7 +90,12 @@ export type Result = {
   plan?: unknown;
 };
 export type Message = { id: string; question: string; result: Result };
-export type Session = { id: string; cube_id: string; created_at: string };
+export type Session = {
+  id: string;
+  cube_id: string;
+  cube_ids?: string[];
+  created_at: string;
+};
 export async function askAgent(
   session: string,
   question: string,
@@ -119,9 +148,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   const data = await response.json();
   if (!response.ok)
     throw new Error(
-      typeof data.detail === "string"
-        ? data.detail
-        : errors().invalid,
+      typeof data.detail === "string" ? data.detail : errors().invalid,
     );
   return data;
 }
@@ -182,9 +209,7 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
   const data = await response.json();
   if (!response.ok)
     throw new Error(
-      typeof data.detail === "string"
-        ? data.detail
-        : errors().importFailed,
+      typeof data.detail === "string" ? data.detail : errors().importFailed,
     );
   return data;
 }

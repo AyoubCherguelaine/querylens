@@ -26,6 +26,7 @@ import {
   type Source,
   type SourceOverview,
 } from "@/lib/api";
+import { ChatTables } from "./chat-tables";
 import { ChatSidebar } from "./chat-sidebar";
 import { SchemaSidebar } from "./schema-sidebar";
 import { ImportData } from "./import-data";
@@ -63,6 +64,7 @@ export function Workspace() {
   const [rightOpen, setRightOpen] = useState(false);
   const messageSequence = useRef(0);
   const [selectedSource, setSelectedSource] = useState("");
+  const [extraCubeIds, setExtraCubeIds] = useState<string[]>([]);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [overview, setOverview] = useState<SourceOverview>({
     sources: [],
@@ -80,6 +82,17 @@ export function Workspace() {
   );
   const sourceCubes = cubes.filter((c) => c.source_id === selectedSource);
   const cube = cubes.find((c) => c.id === selected);
+  const chatCubeIds = [selected, ...extraCubeIds];
+  const candidateCubes = cubes.filter((candidate) => {
+    const source = overview.sources.find(
+      (item) => item.id === candidate.source_id,
+    );
+    return (
+      source &&
+      activeSource &&
+      (source.kind === "existing") === (activeSource.kind === "existing")
+    );
+  });
   const importedTable = activeSource?.manifest.tables?.find(
     (table) => table.name === cube?.definition.table,
   );
@@ -121,6 +134,7 @@ export function Workspace() {
     setSelectedSource(id);
     setSelected(availableCubes.find((c) => c.source_id === id)?.id || "");
     setSession("");
+    setExtraCubeIds([]);
     setMessages([]);
     setQuestion("");
     setError("");
@@ -198,6 +212,7 @@ export function Workspace() {
     setQuestion("");
     setSelected(id);
     setSession("");
+    setExtraCubeIds([]);
     setMessages([]);
     setError("");
   }
@@ -218,7 +233,7 @@ export function Workspace() {
     setBusy(true);
     setError("");
     try {
-      const history = await api<{ messages: Message[] }>(
+      const history = await api<{ messages: Message[]; cube_ids: string[] }>(
         `chat/session/${item.id}`,
       );
       setLeftOpen(false);
@@ -229,10 +244,40 @@ export function Workspace() {
       );
       setView("analysis");
       setSession(item.id);
+      setExtraCubeIds(
+        (history.cube_ids || [item.cube_id]).filter(
+          (id) => id !== item.cube_id,
+        ),
+      );
       setMessages(history.messages);
       setTab("analysis");
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function changeChatTables(ids: string[]) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const selectedIds = session
+        ? (
+            await api<{ cube_ids: string[] }>(
+              `chat/session/${session}/tables`,
+              { cube_ids: ids },
+            )
+          ).cube_ids
+        : ids;
+      setExtraCubeIds(selectedIds.filter((id) => id !== selected));
+      setSessions((previous) =>
+        previous.map((item) =>
+          item.id === session ? { ...item, cube_ids: selectedIds } : item,
+        ),
+      );
+    } catch (error) {
+      setError((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -259,6 +304,7 @@ export function Workspace() {
       if (!id) {
         const created = await api<{ id: string }>("chat/session", {
           cube_id: selected,
+          cube_ids: chatCubeIds,
         });
         id = created.id;
         setSession(id);
@@ -330,6 +376,7 @@ export function Workspace() {
       router.replace("/");
       setMessages([]);
       setSession("");
+      setExtraCubeIds([]);
       setCubes([]);
       setSelected("");
       setQuestion("");
@@ -507,7 +554,13 @@ export function Workspace() {
               />
             </>
           ) : (
-            <section className={cube ? "analysis-panel" : "analysis-empty"}>
+            <section
+              className={
+                cube
+                  ? `analysis-panel ${tab === "analysis" ? "chat-mode" : ""}`
+                  : "analysis-empty"
+              }
+            >
               <div className="page-heading">
                 <div>
                   <span className="eyebrow">{t.eyebrow}</span>
@@ -565,11 +618,6 @@ export function Workspace() {
                           {cube.definition.schema}.{cube.definition.table}
                         </p>
                       </div>
-                      <span className="tag">
-                        {cube.definition.kind
-                          ? t.kindCube(cube.definition.kind)
-                          : t.sourceCube}
-                      </span>
                     </div>
                     <div className="cube-stats">
                       <div>
@@ -814,7 +862,7 @@ export function Workspace() {
                               placeholder={t.askPlaceholder(
                                 cube.definition.name,
                               )}
-                              rows={2}
+                              rows={1}
                               onKeyDown={(e) => {
                                 if (
                                   e.key === "Enter" &&
@@ -830,10 +878,13 @@ export function Workspace() {
                               align="block-end"
                               className="composer-footer"
                             >
-                              <span>
-                                <Box size={13} />
-                                {cube.definition.name}
-                              </span>
+                              <ChatTables
+                                primary={cube}
+                                candidates={candidateCubes}
+                                selectedIds={chatCubeIds}
+                                busy={busy}
+                                onChange={changeChatTables}
+                              />
                               <InputGroupButton
                                 variant="default"
                                 size="icon-sm"

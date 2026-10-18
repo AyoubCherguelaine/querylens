@@ -4,7 +4,7 @@ A PostgreSQL analytics workspace with a FastAPI backend and Next.js frontend. Up
 
 Chat uses a **conversational tool agent**. It receives the new question, the most recent 30 saved turns, prior SQL attempts and up to five result rows per query (history is capped at 100,000 characters). It can inspect the selected source, sample tables, run multiple SQL queries with joins and subqueries, recover from SQL errors, ask the user for clarification, and answer from observed results. The UI streams model/tool status, inputs, outputs and errors; completed traces are saved with the conversation and can be downloaded as evidence. Sampling offers explicit discovered table references and also resolves bare, schema-qualified, quoted, or unambiguous display names.
 
-Python parses agent SQL with PostgreSQL's parser and permits one SELECT over fully qualified tables discovered in the selected source. Queries use read-only transactions, a restricted search path, a built-in analytics function/cast/operator allowlist, statement timeouts and bounded cursor fetching. Writes, application/system tables, other sources, row locking and arbitrary functions are rejected. Use derived subqueries instead of CTE references. Model answers still require review against the displayed evidence. The direct structured-plan analysis and profiling actions remain available without a model.
+Python parses agent SQL with PostgreSQL's parser and permits one SELECT over the chat's selected tables, using joins, derived subqueries or non-recursive CTEs. Physical tables must be fully schema-qualified. Queries use read-only transactions, a restricted search path, a built-in analytics function/cast/operator allowlist, statement timeouts and bounded cursor fetching. Writes, application/system tables, unselected tables, row locking and arbitrary functions are rejected. Model answers still require review against the displayed evidence. The direct structured-plan analysis and profiling actions remain available without a model.
 
 For narrative output, ask “Write a readable analysis of this dataset” or “Turn those results into a summary for my manager,” or select **Write an analysis**. The agent can also choose narrative output when it helps explain findings. Its `write_analysis` tool returns a titled report with a summary, short sections and supporting query references. Reports appear directly in the conversation and can be downloaded as plain text. They persist with their evidence and can be rewritten in later turns without rerunning SQL. Unknown or failed query references are rejected; language-model interpretation and numerical claims still need review against the evidence. Samples and limited results retain their flags, and the writing instructions require material limitations and distinguish observations from interpretation.
 
@@ -149,6 +149,14 @@ Scroller, Message/Bubble, Input Group, and Trace. Streamdown renders model Markd
 in both answers and reports. The existing FastAPI NDJSON stream supplies tool events
 and final results; no separate AI SDK backend is required. Add further UI components
 with `npx shadcn@latest add <component>` from `frontend/`.
+
+Use **+** inside the message composer to add tables or cubes to the conversation.
+Selections are saved with the chat and can be removed without losing its messages.
+The agent can join, compare, or use subqueries and non-recursive CTEs across up to
+20 selected tables on the same database connection, including multiple imported
+schemas. Query execution is restricted to the selected, owned tables. Apply
+`python -m scripts.migrate` before starting this version; migration 003 preserves
+existing chats with their original table selected.
 
 PostgreSQL stores users, owned source records and import manifests, cube definitions as JSONB, sessions, and immutable message results. UUID identities and foreign keys replace MongoDB ObjectIds. Passwords use Argon2; JWTs require an expiry, subject, and audience. Source/cube/session operations enforce ownership. Imported schemas are private to their owner. Existing configured analytics schemas are shared with registered analysts: saved-object ownership is **not** row-level source isolation for those shared schemas. Use separate deployments/source credentials for different data access boundaries.
 

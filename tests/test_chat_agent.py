@@ -282,3 +282,77 @@ async def test_sampling_tools_use_discovered_references_and_log_status(monkeypat
     logged = [r for r in caplog.records if r.getMessage() == "chat.agent_step"]
     assert any(r.tool == "sample_table" and r.status == "completed" for r in logged)
     assert "Private purpose" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "WITH q AS (SELECT amount FROM sales.orders) SELECT * FROM q",
+        "WITH q AS (SELECT amount FROM sales.orders), r AS (SELECT * FROM q) SELECT * FROM r",
+        "SELECT * FROM (WITH q AS (SELECT amount FROM sales.orders) SELECT * FROM q) sub",
+        "WITH q AS (SELECT amount FROM sales.orders) SELECT * FROM q WHERE EXISTS (SELECT 1 FROM q)",
+    ],
+)
+def test_readonly_ctes(sql):
+    assert validate_sql(sql, DEFINITIONS) == sql
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "WITH q AS (DELETE FROM sales.orders RETURNING *) SELECT * FROM q",
+        "WITH q AS (SELECT * FROM chat_olap.users) SELECT * FROM q",
+        "WITH q AS (SELECT * FROM other.orders) SELECT * FROM q",
+        "WITH RECURSIVE q AS (SELECT 1 UNION ALL SELECT * FROM q) SELECT * FROM q",
+        "WITH q AS (SELECT * FROM r), r AS (SELECT * FROM sales.orders) SELECT * FROM q",
+        "SELECT * FROM (WITH q AS (SELECT * FROM sales.orders) SELECT * FROM q) sub, q",
+        "WITH q AS (SELECT amount INTO sales.copy FROM sales.orders) SELECT * FROM q",
+        "WITH q AS (SELECT pg_sleep(1)) SELECT * FROM q",
+    ],
+)
+def test_ctes_cannot_escape_scope_or_write(sql):
+    with pytest.raises(ValueError):
+        validate_sql(sql, DEFINITIONS)
+
+
+async def test_explicit_chat_tables_limit_schema_and_sql_scope(monkeypatch):
+    from backend.services.chat_agent import table_ref
+
+    orders = DEFINITIONS[0]
+    customers = {"schema": "crm", "table": "customers", "fields": [{"name": "id"}]}
+    hidden = {"schema": "sales", "table": "private", "fields": [{"name": "id"}]}
+    client, _ = mock_agent(
+        monkeypatch,
+        [
+            response("source_schema", {"purpose": "Inspect"}, 0),
+            response("finish", {"answer": "Ready"}, 1),
+        ],
+    )
+    discovery = AsyncMock(return_value=[orders, customers, hidden])
+    monkeypatch.setattr("backend.services.chat_agent.discover", discovery)
+    result = await run_agent(
+        None, settings(), orders, "Join both", [], selected_cubes=[orders, customers]
+    )
+    assert discovery.call_args.kwargs["schemas"] == ["sales", "crm"]
+    context = json.loads(client.responses.create.call_args_list[0].kwargs["input"][0]["content"])
+    assert context["selected_tables"] == [
+        {"schema": "sales", "table": "orders"},
+        {"schema": "crm", "table": "customers"},
+    ]
+    schema = next(step for step in result["steps"] if step["tool"] == "source_schema")
+    assert [table_ref(d) for d in schema["output"]["tables"]] == ["sales.orders", "crm.customers"]
+    tools = client.responses.create.call_args_list[0].kwargs["tools"]
+    sample = next(tool for tool in tools if tool["name"] == "sample_table")
+    assert sample["parameters"]["properties"]["table"]["enum"] == ["sales.orders", "crm.customers"]
+
+
+async def test_missing_selected_table_does_not_call_model(monkeypatch):
+    from backend.services.planner import PlannerUnavailable
+
+    client, _ = mock_agent(monkeypatch, [])
+    missing = {"schema": "sales", "table": "deleted"}
+    with pytest.raises(PlannerUnavailable, match="selected table is unavailable"):
+        await run_agent(
+            None, settings(), DEFINITIONS[0], "join", [], selected_cubes=[DEFINITIONS[0], missing]
+        )
+    client.responses.create.assert_not_called()

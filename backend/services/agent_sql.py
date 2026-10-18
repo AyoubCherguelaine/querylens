@@ -43,23 +43,39 @@ def validate_sql(sql, definitions):
     def names(parts):
         return [p.get("String", {}).get("sval", "") for p in parts]
 
-    def visit(node):
+    def visit(node, ctes=frozenset()):
         if isinstance(node, list):
             for value in node:
-                visit(value)
+                visit(value, ctes)
         elif isinstance(node, dict):
             for kind, value in node.items():
+                if kind == "SelectStmt":
+                    if value.get("intoClause") or value.get("lockingClause"):
+                        raise ValueError("SELECT INTO and row locking are not allowed.")
+                    clause = value.get("withClause", {})
+                    if clause.get("recursive"):
+                        raise ValueError("Recursive CTEs are not supported.")
+                    # A CTE sees outer CTEs and earlier siblings, never later ones.
+                    visible = set(ctes)
+                    for entry in clause.get("ctes", []):
+                        visit(entry, frozenset(visible))
+                        visible.add(entry["CommonTableExpr"]["ctename"])
+                    for field, child in value.items():
+                        if field != "withClause":
+                            visit(child, frozenset(visible))
+                    continue
                 if kind.endswith("Stmt") and kind != "SelectStmt":
                     raise ValueError("Only SELECT statements are allowed, including in subqueries.")
-                if kind == "SelectStmt" and (value.get("intoClause") or value.get("lockingClause")):
-                    raise ValueError("SELECT INTO and row locking are not allowed.")
                 if kind == "RangeVar" and (
                     value.get("catalogname")
-                    or (value.get("schemaname"), value.get("relname")) not in allowed
+                    or (
+                        (value.get("schemaname"), value.get("relname")) not in allowed
+                        and not (not value.get("schemaname") and value.get("relname") in ctes)
+                    )
                 ):
                     raise ValueError(
-                        "Use only fully schema-qualified tables listed by source_schema. "
-                        "Use derived subqueries instead of CTE references."
+                        "Use only fully schema-qualified tables listed by source_schema "
+                        "or CTEs defined in this query."
                     )
                 if kind == "FuncCall":
                     parts = names(value["funcname"])
@@ -84,7 +100,7 @@ def validate_sql(sql, definitions):
                         raise ValueError("Unsupported SQL operator.")
                 if kind in {"CollateClause", "RangeTableSample", "SQLValueFunction", "XmlExpr"}:
                     raise ValueError(f"Unsupported SQL construct: {kind}.")
-                visit(value)
+                visit(value, ctes)
 
     visit(statements[0]["stmt"])
     return sql.strip().removesuffix(";")

@@ -53,7 +53,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         </div>
       )}
       {result.truncated && <p className="notice">{t.truncated}</p>}
-      {(result.sql || result.steps?.length) && (
+      {!!(result.sql || result.steps?.length) && (
         <>
           <div className="evidence">
             <details>

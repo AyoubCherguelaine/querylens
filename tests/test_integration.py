@@ -189,7 +189,7 @@ def test_chat_persistence_refusal_and_provider_failure(client, monkeypatch):
 
     client.app.state.settings.openai_api_key = SecretStr("test-key")
 
-    async def planned(pool, settings, definition, question, history, emit):
+    async def planned(pool, settings, definition, question, history, emit, *, selected_cubes):
         from backend.services.analysis import execute_plan
 
         assert history == []
@@ -199,7 +199,7 @@ def test_chat_persistence_refusal_and_provider_failure(client, monkeypatch):
     response = client.post(endpoint, headers=headers, json={"question": "count rows"})
     assert response.status_code == 200 and response.json()["rows"] == [{"m0": 4}]
 
-    async def clarify(pool, settings, definition, question, history, emit):
+    async def clarify(pool, settings, definition, question, history, emit, *, selected_cubes):
         assert history[0]["question"] == "count rows"
         assert history[0]["result"]["sql"]
         return {"status": "clarification", "answer": "Which business metric?"}
@@ -366,7 +366,7 @@ def test_chat_and_question_quotas(client, monkeypatch):
     cube_id = discover(client, headers)
     client.app.state.settings.openai_api_key = SecretStr("test-key")
 
-    async def answer(pool, settings, definition, question, history, emit):
+    async def answer(pool, settings, definition, question, history, emit, *, selected_cubes):
         return {"status": "clarification", "answer": "ok"}
 
     monkeypatch.setattr("backend.api.analytics.run_agent", answer)

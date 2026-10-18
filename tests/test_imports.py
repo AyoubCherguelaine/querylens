@@ -400,3 +400,133 @@ def test_imported_source_limit_per_account(client):
     assert third.status_code == 422 and "2 imported-source limit" in third.json()["detail"]
     other = account(client, "other@example.com")
     assert upload(client, other, content).status_code == 201
+
+
+def test_multitable_chat_persistence_join_and_ownership(client, tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from pydantic import SecretStr
+
+    from tests.test_chat_agent import response
+
+    headers = account(client)
+    source = upload(client, headers, sqlite_file(tmp_path), name="Retail.sqlite").json()
+    cubes = client.get("/sources/" + source["id"], headers=headers).json()["cubes"]
+    by_table = {c["definition"]["table"]: c for c in cubes}
+    primary = by_table["orders"]["id"]
+    extra = by_table["customers"]["id"]
+    selected = [primary, extra]
+    created = client.post(
+        "/chat/session", headers=headers, json={"cube_id": primary, "cube_ids": selected}
+    )
+    assert created.status_code == 201, created.text
+    session = created.json()["id"]
+    endpoint = f"/chat/session/{session}"
+    assert created.json()["cube_ids"] == selected
+    assert client.get(endpoint, headers=headers).json()["cube_ids"] == selected
+    assert client.get("/chat/sessions", headers=headers).json()[0]["cube_ids"] == selected
+
+    other = account(client, "outsider@example.com")
+    assert (
+        client.post(endpoint + "/tables", headers=other, json={"cube_ids": selected}).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/chat/session", headers=other, json={"cube_id": primary, "cube_ids": selected}
+        ).status_code
+        == 404
+    )
+    own_source = upload(client, other, b"id,name\n1,Other\n", name="Other.csv").json()
+    foreign_cube = client.get("/sources/" + own_source["id"], headers=other).json()["cubes"][0][
+        "id"
+    ]
+    assert (
+        client.post(
+            endpoint + "/tables", headers=headers, json={"cube_ids": [primary, foreign_cube]}
+        ).status_code
+        == 404
+    )
+    assert client.get(endpoint, headers=headers).json()["cube_ids"] == selected
+
+    schema = source["schema_name"]
+    sql = f'''WITH totals AS (
+        SELECT customer_id, sum(amount) AS amount FROM "{schema}".orders GROUP BY customer_id
+    ) SELECT c.name, t.amount FROM totals t JOIN "{schema}".customers c ON c.id=t.customer_id
+      ORDER BY c.name'''
+    provider = AsyncMock()
+    provider.__aenter__.return_value = provider
+    provider.responses.create.side_effect = [
+        response("source_schema", {"purpose": "Inspect selected tables"}, 0),
+        response("query_postgres", {"sql": sql, "purpose": "Join order totals to customers"}, 1),
+        response("finish", {"answer": "North: 10.25; South: 20.5"}, 2),
+    ]
+    monkeypatch.setattr("backend.services.chat_agent.AsyncOpenAI", lambda **kw: provider)
+    client.app.state.settings.openai_api_key = SecretStr("test-key")
+    result = client.post(
+        endpoint + "/messages", headers=headers, json={"question": "Join orders and customers"}
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["rows"] == [
+        {"name": "North", "amount": "10.25"},
+        {"name": "South", "amount": "20.5"},
+    ]
+    schema_step = next(s for s in result.json()["steps"] if s["tool"] == "source_schema")
+    assert {d["table"] for d in schema_step["output"]["tables"]} == {"orders", "customers"}
+    history = client.get(endpoint, headers=headers).json()
+    assert len(history["messages"]) == 1
+    assert history["messages"][0]["result"]["cube_ids"] == selected
+
+    updated = client.post(endpoint + "/tables", headers=headers, json={"cube_ids": [primary]})
+    assert updated.status_code == 200 and updated.json()["cube_ids"] == [primary]
+    assert len(client.get(endpoint, headers=headers).json()["messages"]) == 1
+    provider.responses.create.side_effect = [
+        response("query_postgres", {"sql": sql, "purpose": "Try the previous join"}, 3),
+        response("ask_user", {"question": "Add customers to this chat first."}, 4),
+    ]
+    narrowed = client.post(
+        endpoint + "/messages", headers=headers, json={"question": "Repeat the join"}
+    ).json()
+    assert narrowed["status"] == "clarification"
+    attempt = next(step for step in narrowed["steps"] if step["tool"] == "query_postgres")
+    assert attempt["status"] == "failed"
+    assert "source_schema" in attempt["output"]["error"]
+    assert not narrowed.get("rows")
+    # The fixed main table is retained, and duplicate selections are collapsed.
+    assert (
+        client.post(
+            endpoint + "/tables", headers=headers, json={"cube_ids": [extra, extra]}
+        ).json()["cube_ids"]
+        == selected
+    )
+    assert (
+        client.post(endpoint + "/tables", headers=headers, json={"cube_ids": []}).status_code == 422
+    )
+
+    labels_source = upload(client, headers, b"id,label\n1,A\n2,B\n", name="Labels.csv").json()
+    labels = client.get("/sources/" + labels_source["id"], headers=headers).json()["cubes"][0]
+    cross_selected = [primary, labels["id"]]
+    assert (
+        client.post(
+            endpoint + "/tables", headers=headers, json={"cube_ids": cross_selected}
+        ).status_code
+        == 200
+    )
+    label_table = f'"{labels["definition"]["schema"]}"."{labels["definition"]["table"]}"'
+    cross_sql = f'''SELECT o.id, l.label FROM "{schema}".orders o
+        JOIN {label_table} l ON l.id=o.id
+        WHERE o.customer_id IN (SELECT id FROM {label_table}) ORDER BY o.id'''
+    provider.responses.create.side_effect = [
+        response(
+            "query_postgres", {"sql": cross_sql, "purpose": "Join across imported schemas"}, 5
+        ),
+        response("finish", {"answer": "Orders 1 and 2 have labels A and B."}, 6),
+    ]
+    cross_result = client.post(
+        endpoint + "/messages",
+        headers=headers,
+        json={"question": "Join orders to the uploaded labels"},
+    )
+    assert cross_result.status_code == 200, cross_result.text
+    assert cross_result.json()["rows"] == [{"id": 1, "label": "A"}, {"id": 2, "label": "B"}]
+    assert cross_result.json()["cube_ids"] == cross_selected
