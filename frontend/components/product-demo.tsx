@@ -48,7 +48,7 @@ export function ProductDemo() {
           <i />
         </div>
         <span>
-          <Database size={13} /> cube / chat
+          <Database size={13} /> QueryLens
         </span>
         <span className="demo-sample">
           <span />

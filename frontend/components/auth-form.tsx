@@ -47,7 +47,7 @@ export function AuthForm({
             <Database size={20} />
           </span>
           <bdi className="brand-name" dir="ltr">
-            cube<span className="muted">/</span>chat
+            Query<span className="muted">Lens</span>
           </bdi>
         </span>
         <span className="eyebrow">{t.eyebrow}</span>

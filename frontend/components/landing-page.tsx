@@ -38,7 +38,7 @@ export async function LandingPage() {
             <Database size={20} />
           </span>
           <bdi className="brand-name" dir="ltr">
-            cube<span className="muted">/</span>chat
+            Query<span className="muted">Lens</span>
           </bdi>
         </Link>
         <nav aria-label={t.mainNav}>
@@ -187,7 +187,7 @@ export async function LandingPage() {
       </main>
       <footer className="landing-footer">
         <Link className="brand" href="/">
-          <Database size={19} /> cube / chat
+          <Database size={19} /> QueryLens
         </Link>
         <p>{t.footerTagline}</p>
         <div>

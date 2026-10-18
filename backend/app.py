@@ -42,7 +42,7 @@ def create_app(settings=None):
         finally:
             await app.state.db.close()
 
-    app = FastAPI(title="Chat OLAP", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="QueryLens", version="0.2.0", lifespan=lifespan)
 
     @app.middleware("http")
     async def request_logging(request: Request, call_next):

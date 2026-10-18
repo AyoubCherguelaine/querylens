@@ -53,6 +53,7 @@
   width: 100%;
   justify-content: flex-start;
   padding: 11px 14px;
+  margin-top: 20px;
   box-shadow: 0 3px 7px #4264d51a;
 }
 .sidebar-search {
@@ -80,15 +81,35 @@
 }
 .workspace .section-label {
   display: flex;
+  align-items: center;
   margin: 0 0 12px;
   padding: 0 8px;
   font-size: 10px;
-  letter-spacing: 1px;
+  letter-spacing: 1.4px;
   color: #6d7b90;
+  gap: 8px;
 }
-.workspace .section-label > span {
+.workspace .section-label svg {
+  color: #7d89a0;
+}
+.workspace .section-label > span:not(.chat-count) {
   margin-inline-start: auto;
   font-size: 10px;
+  letter-spacing: 0;
+}
+.workspace .chat-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-inline-start: auto;
+  border-radius: 999px;
+  background: #e0e7fb;
+  color: #3659bd;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0;
 }
 .workspace .section-label .icon-button {
@@ -105,56 +126,121 @@
 }
 .workspace .session-list button {
   display: flex;
-  align-items: start;
-  gap: 10px;
-  padding: 12px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
   min-width: 0;
   width: 100%;
   font-size: 13px;
   color: #5a6880;
-  margin-bottom: 5px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 .workspace .session-list button > svg {
   flex: none;
-  margin-top: 2px;
+  color: #7d89a0;
 }
-.workspace .session-list button > span {
+.workspace .session-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+}
+.workspace .session-name {
+  font-weight: 500;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #5a6880;
 }
-.workspace .session-list small {
+.workspace .session-date {
   font-size: 11px;
-  margin-top: 5px;
+  white-space: nowrap;
+  color: #9aa4b1;
+  margin-inline-start: auto;
+}
+.workspace .session-list button:hover .session-name,
+.workspace .session-list button:hover > svg {
+  color: #3659bd;
 }
 .workspace .session-list button:hover {
   background: #e7ecf6;
 }
 .workspace .session-list button.active {
-  background: #e0e7fb;
+  background: #e8eefc;
+  color: #3659bd;
+  border-inline-start: 3px solid var(--accent);
+}
+.workspace .session-list button.active .session-name {
   color: #3659bd;
 }
-.history-empty {
-  padding: 35px 10px;
-  color: #8a97ad;
+.workspace .history-empty {
+  padding: 40px 16px;
   text-align: center;
+  color: #8a97ad;
 }
-.history-empty p {
+.workspace .history-empty svg {
+  color: #4264d5;
+  opacity: 0.5;
+}
+.workspace .history-empty p {
   font-size: 12px;
   color: #5d6c83;
+  margin: 12px 0 4px;
 }
-.history-empty small {
-  line-height: 1.7;
+.workspace .history-empty small {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a97ad;
 }
 .workspace .sidebar-bottom {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   position: static;
   flex: none;
-  padding: 16px 7px;
+  padding: 16px 12px;
   font-size: 11px;
+  color: #6d7b90;
+  border-top: 1px solid var(--border);
 }
 .workspace .sidebar-bottom > span {
   display: inline;
+}
+.workspace .source-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.workspace .source-name {
+  font-weight: 600;
+  color: #35465f;
+}
+.workspace .source-kind {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef2fd;
+  color: var(--accent);
+  border: 1px solid #dde6f7;
+}
+.workspace .sidebar-bottom .dot {
+  margin-inline-end: 6px;
+}
+.workspace .sidebar-bottom .icon-button {
+  color: #5a6880;
+}
+.workspace .sidebar-bottom .icon-button:hover {
+  color: var(--accent);
 }
 .workspace .main-panel {
   display: flex;

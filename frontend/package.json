@@ -1,5 +1,5 @@
 {
-  "name": "chat-olap-web",
+  "name": "querylens-web",
   "version": "0.2.0",
   "private": true,
   "scripts": {

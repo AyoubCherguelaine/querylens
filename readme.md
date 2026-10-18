@@ -1,6 +1,6 @@
-# Chat OLAP
+# QueryLens
 
-A PostgreSQL analytics workspace with a FastAPI backend and Next.js frontend. Upload a CSV or multi-table SQLite database, organize its tables under a file-named schema, reopen saved sources from the dashboard, and analyze actual query results with inspectable evidence.
+QueryLens is a conversational data analytics workspace with a FastAPI backend, Next.js frontend, and PostgreSQL. Upload a CSV or multi-table SQLite database, organize its tables under a file-named schema, reopen saved sources from the dashboard, and analyze actual query results with inspectable evidence.
 
 Chat uses a **conversational tool agent**. It receives the new question, the most recent 30 saved turns, prior SQL attempts and up to five result rows per query (history is capped at 100,000 characters). It can inspect the selected source, sample tables, run multiple SQL queries with joins and subqueries, recover from SQL errors, ask the user for clarification, and answer from observed results. The UI streams model/tool status, inputs, outputs and errors; completed traces are saved with the conversation and can be downloaded as evidence. Sampling offers explicit discovered table references and also resolves bare, schema-qualified, quoted, or unambiguous display names.
 

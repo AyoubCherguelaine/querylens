@@ -96,6 +96,13 @@ export function Workspace() {
   const importedTable = activeSource?.manifest.tables?.find(
     (table) => table.name === cube?.definition.table,
   );
+  const sourceSessions = sessions.filter((item) => {
+    if (!selectedSource) return false;
+    const ids = item.cube_ids?.length ? item.cube_ids : [item.cube_id];
+    return ids.some(
+      (id) => cubes.find((c) => c.id === id)?.source_id === selectedSource,
+    );
+  });
   const suggestedDimension =
     cube?.definition.dimensions.find(
       (name) =>
@@ -427,8 +434,9 @@ export function Workspace() {
         rightOpen={rightOpen}
         busy={busy}
         cubes={cubes}
-        sessions={sessions}
+        sessions={sourceSessions}
         session={session}
+        activeSource={activeSource}
         onClose={() => setLeftOpen(false)}
         onNewChat={() => choose(selected)}
         onOpenSession={openSession}

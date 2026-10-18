@@ -30,11 +30,11 @@ function plural(locale: string, count: number, forms: PluralForms) {
 
 const en = {
   meta: {
-    title: "Cube Chat · A clearer conversation with your data",
+    title: "QueryLens · Conversational Data Analytics",
     description:
-      "Explore PostgreSQL data with inspectable cubes and grounded analytical answers.",
-    signIn: "Sign in · Cube Chat",
-    workspace: "Workspace · Cube Chat",
+      "Explore CSV, SQLite, and PostgreSQL data with conversational analytics, inspectable SQL, and reports grounded in query results.",
+    signIn: "Sign in · QueryLens",
+    workspace: "Workspace · QueryLens",
   },
   language: {
     switchTo: "العربية",
@@ -43,7 +43,7 @@ const en = {
   },
   landing: {
     skip: "Skip to content",
-    home: "Cube Chat home",
+    home: "QueryLens home",
     mainNav: "Main navigation",
     howItWorks: "How it works",
     features: "Features",
@@ -55,7 +55,7 @@ const en = {
     heroLine2: "a story.",
     heroAccent: "Ask it.",
     heroText:
-      "Go from tables to understanding. Ask questions in plain language, explore your schemas, and see the evidence behind every answer.",
+      "Bring your CSV, SQLite, or PostgreSQL data into QueryLens. Ask questions in plain language, explore your tables, and turn query results into readable reports with evidence you can inspect.",
     startExploring: "Start exploring",
     tryDemo: "Try the live demo",
     heroNote: "Bring your data. Keep the query in view.",
@@ -271,7 +271,10 @@ const en = {
     emptyTitle: "A little curiosity goes a long way.",
     emptyText: "Your conversations will appear here after you ask a question.",
     noMatch: "No chats match your search.",
-    source: "PostgreSQL source",
+    today: "Today",
+    yesterday: "Yesterday",
+    source: "Data source",
+    sourceKind: (kind: string) => kind,
     signOut: "Sign out",
   },
   schema: {
@@ -410,11 +413,11 @@ export type Dictionary = typeof en;
 
 const ar: Dictionary = {
   meta: {
-    title: "Cube Chat · حوار أوضح مع بياناتك",
+    title: "QueryLens · حوار أوضح مع بياناتك",
     description:
-      "استكشف بيانات PostgreSQL عبر مكعبات قابلة للفحص وإجابات تحليلية مبنية على الأدلة.",
-    signIn: "تسجيل الدخول · Cube Chat",
-    workspace: "مساحة العمل · Cube Chat",
+      "استكشف بيانات CSV وSQLite وPostgreSQL عبر حوار طبيعي، واستعلامات SQL قابلة للفحص، وتقارير مستندة إلى نتائج الاستعلامات.",
+    signIn: "تسجيل الدخول · QueryLens",
+    workspace: "مساحة العمل · QueryLens",
   },
   language: {
     switchTo: "English",
@@ -423,7 +426,7 @@ const ar: Dictionary = {
   },
   landing: {
     skip: "تخطَّ إلى المحتوى",
-    home: "الصفحة الرئيسية لـ Cube Chat",
+    home: "الصفحة الرئيسية لـ QueryLens",
     mainNav: "التنقل الرئيسي",
     howItWorks: "كيف يعمل",
     features: "المزايا",
@@ -435,7 +438,7 @@ const ar: Dictionary = {
     heroLine2: "قصة.",
     heroAccent: "اسألها.",
     heroText:
-      "انتقل من الجداول إلى الفهم. اطرح أسئلتك بلغة طبيعية، واستكشف مخططاتك، واطّلع على الأدلة وراء كل إجابة.",
+      "أضف بيانات CSV أو SQLite أو PostgreSQL إلى QueryLens. اطرح أسئلتك بلغة طبيعية، واستكشف جداولك، وحوّل نتائج الاستعلامات إلى تقارير واضحة بأدلة يمكنك فحصها.",
     startExploring: "ابدأ الاستكشاف",
     tryDemo: "جرّب العرض التجريبي",
     heroNote: "أحضر بياناتك، وابقَ مطّلعًا على الاستعلام.",
@@ -665,7 +668,17 @@ const ar: Dictionary = {
     emptyTitle: "قليل من الفضول يصنع فرقًا كبيرًا.",
     emptyText: "ستظهر محادثاتك هنا بعد أن تطرح سؤالًا.",
     noMatch: "لا توجد محادثات تطابق بحثك.",
-    source: "مصدر PostgreSQL",
+    today: "اليوم",
+    yesterday: "أمس",
+    source: "مصدر البيانات",
+    sourceKind: (kind: string) =>
+      kind === "existing"
+        ? "PostgreSQL"
+        : kind === "csv"
+          ? "CSV"
+          : kind === "sqlite"
+            ? "SQLite"
+            : kind.toUpperCase(),
     signOut: "تسجيل الخروج",
   },
   schema: {

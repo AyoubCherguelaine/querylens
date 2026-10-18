@@ -11,7 +11,7 @@ import {
   MessageSquare,
   LogOut,
 } from "lucide-react";
-import type { Cube, Session } from "@/lib/api";
+import type { Cube, Session, Source } from "@/lib/api";
 import { LanguageSwitch, useT } from "@/lib/i18n/client";
 
 export function ChatSidebar({
@@ -21,6 +21,7 @@ export function ChatSidebar({
   cubes,
   sessions,
   session,
+  activeSource,
   onClose,
   onNewChat,
   onOpenSession,
@@ -32,6 +33,7 @@ export function ChatSidebar({
   cubes: Cube[];
   sessions: Session[];
   session: string;
+  activeSource?: Source;
   onClose: () => void;
   onNewChat: () => void;
   onOpenSession: (session: Session) => void;
@@ -49,6 +51,26 @@ export function ChatSidebar({
         .join(" + ") || t.fallbackName
     );
   }
+  function formatDate(value: string) {
+    const date = new Date(value);
+    const now = new Date();
+    const sameDay =
+      date.toLocaleDateString(intl) === now.toLocaleDateString(intl);
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (sameDay) return t.today;
+    if (date.toLocaleDateString(intl) === yesterday.toLocaleDateString(intl))
+      return t.yesterday;
+    return date.toLocaleDateString(intl, {
+      month: "short",
+      day: "numeric",
+      year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
+    });
+  }
+  const sourceKind = activeSource ? t.sourceKind(activeSource.kind) : "";
+  const filtered = sessions.filter((item) =>
+    sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
+  );
   return (
     <aside
       id="chat-sidebar"
@@ -63,7 +85,7 @@ export function ChatSidebar({
           <Database size={19} />
         </span>
         <bdi className="brand-name" dir="ltr">
-          cube<span className="muted">/</span>chat
+          Query<span className="muted">Lens</span>
         </bdi>
         <Button
           variant="ghost"
@@ -74,13 +96,6 @@ export function ChatSidebar({
         >
           <X size={18} />
         </Button>
-      </div>
-      <div className="workspace-label">
-        <span className="workspace-avatar">A</span>
-        <div>
-          {t.workspace}
-          <small>{t.workspaceHint}</small>
-        </div>
       </div>
       <Button
         variant="ghost"
@@ -101,50 +116,52 @@ export function ChatSidebar({
         />
       </label>
       <div className="section-label">
-        <History size={13} /> {t.history} <span>{sessions.length}</span>
+        <History size={13} /> {t.history}
+        <span className="chat-count">{filtered.length}</span>
       </div>
       <div className="session-list">
-        {sessions
-          .filter((item) =>
-            sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
-          )
-          .map((item) => (
-            <Button
-              variant="ghost"
-              size="plain"
-              className={session === item.id ? "active" : ""}
-              aria-current={session === item.id ? "page" : undefined}
-              disabled={busy}
-              key={item.id}
-              onClick={() => onOpenSession(item)}
-            >
-              <MessageSquare size={16} />
-              <span>
+        {filtered.map((item) => (
+          <Button
+            variant="ghost"
+            size="plain"
+            className={session === item.id ? "active" : ""}
+            aria-current={session === item.id ? "page" : undefined}
+            disabled={busy}
+            key={item.id}
+            onClick={() => onOpenSession(item)}
+          >
+            <MessageSquare size={16} />
+            <span className="session-cell">
+              <span
+                className="session-name"
+                title={sessionName(item)}
+              >
                 {sessionName(item)}
-                <small>
-                  {new Date(item.created_at).toLocaleDateString(intl, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </small>
               </span>
-            </Button>
-          ))}
+              <time className="session-date" dateTime={item.created_at}>
+                {formatDate(item.created_at)}
+              </time>
+            </span>
+          </Button>
+        ))}
         {!sessions.length && (
           <div className="history-empty">
-            <MessageSquare size={25} />
+            <MessageSquare size={26} />
             <p>{t.emptyTitle}</p>
             <small>{t.emptyText}</small>
           </div>
         )}
-        {!!sessions.length &&
-          !sessions.some((item) =>
-            sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
-          ) && <p className="sidebar-hint">{t.noMatch}</p>}
+        {!!sessions.length && !filtered.length && (
+          <p className="sidebar-hint">{t.noMatch}</p>
+        )}
       </div>
       <div className="sidebar-bottom">
-        <span>
-          <span className="dot" /> {t.source}
+        <span className="source-info">
+          <span className="dot" />
+          <span className="source-name">
+            {activeSource?.schema_name || t.source}
+          </span>
+          {!!sourceKind && <span className="source-kind">{sourceKind}</span>}
         </span>
         <LanguageSwitch />
         <Button
