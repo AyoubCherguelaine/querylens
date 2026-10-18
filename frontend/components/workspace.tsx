@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
@@ -30,8 +31,13 @@ import { SchemaSidebar } from "./schema-sidebar";
 import { ImportData } from "./import-data";
 import { SourceDashboard } from "./source-dashboard";
 import { useRouter } from "next/navigation";
-import { AnalysisResult } from "./result";
-import { AgentSteps } from "./agent-steps";
+import { ChatThread } from "./ai-elements/chat-thread";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "./ui/input-group";
 import { useT } from "@/lib/i18n/client";
 
 export function Workspace() {
@@ -55,7 +61,6 @@ export function Workspace() {
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
-  const conversation = useRef<HTMLDivElement>(null);
   const messageSequence = useRef(0);
   const [selectedSource, setSelectedSource] = useState("");
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
@@ -137,10 +142,6 @@ export function Workspace() {
         router.replace("/login");
       });
   }, []);
-  useEffect(() => {
-    const panel = conversation.current;
-    if (panel) panel.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
-  }, [messages, busy, agentSteps]);
   useEffect(() => {
     const resetDrawers = () => {
       setLeftOpen(false);
@@ -252,6 +253,7 @@ export function Workspace() {
     setError("");
     const text = question.trim();
     setPendingQuestion(text);
+    setQuestion("");
     try {
       let id = session;
       if (!id) {
@@ -270,10 +272,13 @@ export function Workspace() {
         });
       });
       appendMessage(text, result);
-      setQuestion("");
       setAgentSteps([]);
-      setSessions(await api<Session[]>("chat/sessions"));
+      // Refreshing the sidebar must not turn a delivered answer into a chat error.
+      void api<Session[]>("chat/sessions")
+        .then(setSessions)
+        .catch(() => {});
     } catch (e) {
+      setQuestion((draft) => draft || text);
       setError((e as Error).message);
     } finally {
       setPendingQuestion("");
@@ -358,7 +363,9 @@ export function Workspace() {
   return (
     <div className="workspace">
       {(leftOpen || rightOpen) && (
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="panel-backdrop"
           tabIndex={-1}
           aria-label={t.closeSidebar}
@@ -383,7 +390,9 @@ export function Workspace() {
       <main className="main-panel" inert={leftOpen || rightOpen}>
         <header className="topbar">
           <div className="workspace-crumb">
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               className="icon-button mobile-toggle"
               aria-label={t.openChats}
               aria-expanded={leftOpen}
@@ -394,7 +403,7 @@ export function Workspace() {
               }}
             >
               <MessageSquare size={19} />
-            </button>
+            </Button>
             <span className="desktop-crumb">
               {t.crumb} <ChevronRight size={14} />
             </span>
@@ -407,7 +416,9 @@ export function Workspace() {
             </strong>
           </div>
           <nav className="workspace-nav" aria-label={t.nav}>
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               className={view === "analysis" ? "active" : ""}
               aria-current={view === "analysis" ? "page" : undefined}
               disabled={busy}
@@ -418,8 +429,10 @@ export function Workspace() {
             >
               <Sparkles size={15} />
               <span>{t.chat}</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="plain"
               className={view === "dashboard" ? "active" : ""}
               aria-current={view === "dashboard" ? "page" : undefined}
               disabled={busy}
@@ -430,8 +443,10 @@ export function Workspace() {
             >
               <FolderOpen size={15} />
               <span>{t.sources}</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="plain"
               className={view === "upload" ? "active" : ""}
               aria-current={view === "upload" ? "page" : undefined}
               disabled={busy}
@@ -442,9 +457,11 @@ export function Workspace() {
             >
               <Upload size={15} />
               <span>{t.upload}</span>
-            </button>
+            </Button>
           </nav>
-          <button
+          <Button
+            variant="ghost"
+            size="plain"
             className="schema-toggle secondary"
             aria-label={t.openSchemas}
             aria-expanded={rightOpen}
@@ -456,7 +473,7 @@ export function Workspace() {
           >
             <Database size={16} />
             <span>{t.schemas}</span>
-          </button>
+          </Button>
         </header>
         <div
           className={`page-content ${view === "analysis" ? "analysis-content" : ""}`}
@@ -501,21 +518,25 @@ export function Workspace() {
                       : t.connectPrompt}
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   className="secondary"
                   disabled={busy}
                   onClick={discover}
                 >
                   <RefreshCw size={15} className={busy ? "spin" : ""} />
                   {t.discoverCubes}
-                </button>
+                </Button>
               </div>
               {!cube ? (
                 <section className="empty-card">
                   <Database size={38} />
                   <h2>{selectedSource ? t.noTables : t.startWithData}</h2>
                   <p>{selectedSource ? t.noTablesText : t.startWithDataText}</p>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="plain"
                     className="primary"
                     onClick={() =>
                       selectedSource ? void discover() : setView("upload")
@@ -524,7 +545,7 @@ export function Workspace() {
                   >
                     {selectedSource ? t.discoverTables : t.uploadData}{" "}
                     <ArrowUp size={16} />
-                  </button>
+                  </Button>
                   {error && (
                     <p className="error" role="alert">
                       {error}
@@ -568,28 +589,34 @@ export function Workspace() {
                     </div>
                   </div>
                   <div className="tabs">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="plain"
                       className={tab === "analysis" ? "active" : ""}
                       onClick={() => setTab("analysis")}
                     >
                       <Sparkles size={16} />
                       {t.analysisTab}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="plain"
                       className={tab === "schema" ? "active" : ""}
                       onClick={() => setTab("schema")}
                     >
                       <Table2 size={16} />
                       {t.schemaTab}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="plain"
                       className="new-analysis"
                       disabled={busy}
                       onClick={() => choose(selected)}
                     >
                       <Plus size={15} />
                       {t.newAnalysis}
-                    </button>
+                    </Button>
                   </div>
                   {error && tab === "schema" && (
                     <p className="error" role="alert">
@@ -600,13 +627,15 @@ export function Workspace() {
                     <section className="schema-card">
                       <div className="profile-heading">
                         <h3>{t.businessModel}</h3>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="plain"
                           className="secondary"
                           disabled={busy}
                           onClick={profile}
                         >
                           {t.profile}
-                        </button>
+                        </Button>
                       </div>
                       <p>{cube.definition.description}</p>
                       <p className="muted">{cube.definition.grain}</p>
@@ -674,7 +703,9 @@ export function Workspace() {
                           <h3>{t.exploreModel}</h3>
                           {cube.definition.suggested_questions.map(
                             (suggestion) => (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="plain"
                                 className="secondary"
                                 key={suggestion}
                                 disabled={busy}
@@ -684,7 +715,7 @@ export function Workspace() {
                                 }}
                               >
                                 {suggestion}
-                              </button>
+                              </Button>
                             ),
                           )}
                         </div>
@@ -697,126 +728,124 @@ export function Workspace() {
                     </section>
                   ) : (
                     <div className="chat-body">
-                      <div className="conversation" ref={conversation}>
-                        {!messages.length && !pendingQuestion ? (
-                          <div className="conversation-empty">
-                            <span className="sparkle">
-                              <Sparkles size={26} />
-                            </span>
-                            <h2>{t.emptyTitle}</h2>
-                            <p>
-                              {t.emptyExplore}{" "}
-                              <strong>{cube.definition.name}</strong>{" "}
-                              {t.emptyWith}
-                              <br />
-                              {t.emptyEvidence}
-                            </p>
-                            <div className="suggestions">
-                              <button
+                      <ChatThread
+                        key={session || selected}
+                        messages={messages}
+                        pendingQuestion={pendingQuestion}
+                        steps={agentSteps}
+                        busy={busy && !!pendingQuestion}
+                      >
+                        <div className="conversation-empty">
+                          <span className="sparkle">
+                            <Sparkles size={26} />
+                          </span>
+                          <h2>{t.emptyTitle}</h2>
+                          <p>
+                            {t.emptyExplore}{" "}
+                            <strong>{cube.definition.name}</strong>{" "}
+                            {t.emptyWith}
+                            <br />
+                            {t.emptyEvidence}
+                          </p>
+                          <div className="suggestions">
+                            <Button
+                              variant="ghost"
+                              size="plain"
+                              disabled={busy}
+                              onClick={() => setQuestion(t.writeAnalysisPrompt)}
+                            >
+                              <Sparkles size={17} />
+                              <span>
+                                {t.writeAnalysis}
+                                <small>{t.writeAnalysisHint}</small>
+                              </span>
+                              <ChevronRight size={16} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="plain"
+                              disabled={busy}
+                              onClick={countRows}
+                            >
+                              <Table2 size={17} />
+                              <span>
+                                {t.countRows}
+                                <small>{t.countRowsHint}</small>
+                              </span>
+                              <ChevronRight size={16} />
+                            </Button>
+                            {suggestedDimension && (
+                              <Button
+                                variant="ghost"
+                                size="plain"
                                 disabled={busy}
                                 onClick={() =>
-                                  setQuestion(t.writeAnalysisPrompt)
+                                  setQuestion(t.countBy(suggestedDimension))
                                 }
                               >
-                                <Sparkles size={17} />
+                                <Layers3 size={17} />
                                 <span>
-                                  {t.writeAnalysis}
-                                  <small>{t.writeAnalysisHint}</small>
+                                  {t.compare}
+                                  <small>{suggestedDimension}</small>
                                 </span>
                                 <ChevronRight size={16} />
-                              </button>
-                              <button disabled={busy} onClick={countRows}>
-                                <Table2 size={17} />
-                                <span>
-                                  {t.countRows}
-                                  <small>{t.countRowsHint}</small>
-                                </span>
-                                <ChevronRight size={16} />
-                              </button>
-                              {suggestedDimension && (
-                                <button
-                                  disabled={busy}
-                                  onClick={() =>
-                                    setQuestion(t.countBy(suggestedDimension))
-                                  }
-                                >
-                                  <Layers3 size={17} />
-                                  <span>
-                                    {t.compare}
-                                    <small>{suggestedDimension}</small>
-                                  </span>
-                                  <ChevronRight size={16} />
-                                </button>
-                              )}
-                            </div>
+                              </Button>
+                            )}
                           </div>
-                        ) : (
-                          messages.map((m) => (
-                            <div className="exchange" key={m.id}>
-                              <div className="question">
-                                <span className="user-avatar">{t.you}</span>
-                                <p dir="auto">{m.question}</p>
-                              </div>
-                              <AnalysisResult result={m.result} />
-                            </div>
-                          ))
-                        )}
-                        {pendingQuestion && (
-                          <div className="question pending-question">
-                            <span className="user-avatar">{t.you}</span>
-                            <p dir="auto">{pendingQuestion}</p>
-                          </div>
-                        )}
-                        {busy && (
-                          <div role="status" className="working">
-                            <span className="dot" /> {t.working}
-                          </div>
-                        )}
-                        <AgentSteps steps={agentSteps} />
-                      </div>
+                        </div>
+                      </ChatThread>
                       <div className="composer-wrap">
                         {error && (
                           <p className="error" role="alert">
                             {error}
                           </p>
                         )}
-                        <form className="composer" onSubmit={ask}>
-                          <label className="sr-only" htmlFor="question">
-                            {t.askLabel}
-                          </label>
-                          <textarea
-                            id="question"
-                            value={question}
-                            onChange={(e) => setQuestion(e.target.value)}
-                            disabled={busy}
-                            maxLength={2000}
-                            placeholder={t.askPlaceholder(cube.definition.name)}
-                            rows={2}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === "Enter" &&
-                                !e.shiftKey &&
-                                !e.nativeEvent.isComposing
-                              ) {
-                                e.preventDefault();
-                                e.currentTarget.form?.requestSubmit();
-                              }
-                            }}
-                          />
-                          <div className="composer-footer">
-                            <span>
-                              <Box size={13} />
-                              {cube.definition.name}
-                            </span>
-                            <button
-                              className="send-button"
-                              type="submit"
-                              disabled={busy || !question.trim()}
-                              aria-label={t.send}
+                        <form onSubmit={ask}>
+                          <InputGroup className="composer">
+                            <label className="sr-only" htmlFor="question">
+                              {t.askLabel}
+                            </label>
+                            <InputGroupTextarea
+                              id="question"
+                              value={question}
+                              onChange={(e) => setQuestion(e.target.value)}
+                              disabled={busy}
+                              maxLength={2000}
+                              placeholder={t.askPlaceholder(
+                                cube.definition.name,
+                              )}
+                              rows={2}
+                              onKeyDown={(e) => {
+                                if (
+                                  e.key === "Enter" &&
+                                  !e.shiftKey &&
+                                  !e.nativeEvent.isComposing
+                                ) {
+                                  e.preventDefault();
+                                  e.currentTarget.form?.requestSubmit();
+                                }
+                              }}
+                            />
+                            <InputGroupAddon
+                              align="block-end"
+                              className="composer-footer"
                             >
-                              <ArrowUp size={18} />
-                            </button>
-                          </div>
+                              <span>
+                                <Box size={13} />
+                                {cube.definition.name}
+                              </span>
+                              <InputGroupButton
+                                variant="default"
+                                size="icon-sm"
+                                className="send-button"
+                                type="submit"
+                                disabled={busy || !question.trim()}
+                                aria-label={t.send}
+                              >
+                                <ArrowUp size={18} />
+                              </InputGroupButton>
+                            </InputGroupAddon>
+                          </InputGroup>
                         </form>
                         <p className="composer-note">{t.composerNote}</p>
                       </div>

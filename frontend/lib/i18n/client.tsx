@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
@@ -37,7 +38,9 @@ export function LanguageSwitch() {
   const router = useRouter();
   const { t, locale } = useT();
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="plain"
       type="button"
       className="language-switch"
       aria-label={t.language.switchLabel}
@@ -51,6 +54,6 @@ export function LanguageSwitch() {
       <Languages size={14} />
       <span className="full">{t.language.switchTo}</span>
       <span className="short">{t.language.short}</span>
-    </button>
+    </Button>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   Database,
@@ -54,13 +56,15 @@ export function ChatSidebar({
         <bdi className="brand-name" dir="ltr">
           cube<span className="muted">/</span>chat
         </bdi>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button drawer-close"
           aria-label={t.close}
           onClick={() => onClose()}
         >
           <X size={18} />
-        </button>
+        </Button>
       </div>
       <div className="workspace-label">
         <span className="workspace-avatar">A</span>
@@ -69,16 +73,18 @@ export function ChatSidebar({
           <small>{t.workspaceHint}</small>
         </div>
       </div>
-      <button
+      <Button
+        variant="ghost"
+        size="plain"
         className="primary new-chat"
         disabled={busy}
         onClick={() => onNewChat()}
       >
         <Plus size={17} /> {t.newChat}
-      </button>
+      </Button>
       <label className="sidebar-search">
         <Search size={15} />
-        <input
+        <Input
           aria-label={t.search}
           placeholder={t.searchPlaceholder}
           value={chatSearch}
@@ -99,7 +105,9 @@ export function ChatSidebar({
               .includes(chatSearch.toLowerCase()),
           )
           .map((item) => (
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               className={session === item.id ? "active" : ""}
               aria-current={session === item.id ? "page" : undefined}
               disabled={busy}
@@ -117,7 +125,7 @@ export function ChatSidebar({
                   })}
                 </small>
               </span>
-            </button>
+            </Button>
           ))}
         {!sessions.length && (
           <div className="history-empty">
@@ -141,14 +149,16 @@ export function ChatSidebar({
           <span className="dot" /> {t.source}
         </span>
         <LanguageSwitch />
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button"
           aria-label={t.signOut}
           disabled={busy}
           onClick={onSignOut}
         >
           <LogOut size={17} />
-        </button>
+        </Button>
       </div>
     </aside>
   );

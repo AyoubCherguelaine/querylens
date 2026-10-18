@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -56,14 +57,16 @@ export function SourceDashboard({
           <h1>{t.title}</h1>
           <p className="muted">{t.text}</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="primary"
           onClick={() => setImporting(true)}
           disabled={busy || importing}
         >
           <Plus size={16} />
           {t.importData}
-        </button>
+        </Button>
       </div>
       <div className="dashboard-stats">
         <div>
@@ -117,7 +120,9 @@ export function SourceDashboard({
           <h2>{t.savedSources}</h2>
           <p className="muted">{t.savedText}</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="secondary"
           disabled={busy}
           onClick={async () => {
@@ -134,7 +139,7 @@ export function SourceDashboard({
         >
           <RefreshCw size={14} />
           {t.refresh}
-        </button>
+        </Button>
       </div>
       {!sources.length ? (
         <section className="sources-empty">
@@ -143,14 +148,16 @@ export function SourceDashboard({
           </span>
           <h2>{t.emptyTitle}</h2>
           <p>{t.emptyText}</p>
-          <button
+          <Button
+            variant="ghost"
+            size="plain"
             className="secondary"
             onClick={() => setImporting(true)}
             disabled={importing}
           >
             <Upload size={16} />
             {t.importFirst}
-          </button>
+          </Button>
           <div className="schema-example">
             <span>sales_2026</span>
             <span>↳ orders</span>
@@ -188,14 +195,16 @@ export function SourceDashboard({
                   {new Date(source.created_at).toLocaleDateString(intl)}
                 </span>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="plain"
                 className="source-open"
                 onClick={() => onOpen(source.id)}
                 disabled={busy}
               >
                 {t.explore}
                 <ArrowRight size={16} />
-              </button>
+              </Button>
             </article>
           ))}
         </div>
@@ -212,7 +221,9 @@ export function SourceDashboard({
                 <strong>{schema.schema_name}</strong>
                 <small>{t.available(schema.table_count)}</small>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="plain"
                 className="secondary"
                 disabled={busy}
                 onClick={() => connect(schema.schema_name)}
@@ -225,7 +236,7 @@ export function SourceDashboard({
                   ? t.reopen
                   : t.use}
                 <ArrowRight size={14} />
-              </button>
+              </Button>
             </div>
           ))}
         </section>

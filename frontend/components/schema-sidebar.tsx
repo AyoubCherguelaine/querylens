@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   Database,
@@ -60,13 +62,15 @@ export function SchemaSidebar({
           <Database size={17} />
           <h2>{t.title}</h2>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button drawer-close"
           aria-label={t.close}
           onClick={() => onClose()}
         >
           <X size={18} />
-        </button>
+        </Button>
       </div>
       <label className="source-selector">
         {t.active}
@@ -88,7 +92,7 @@ export function SchemaSidebar({
       </label>
       <label className="sidebar-search">
         <Search size={15} />
-        <input
+        <Input
           aria-label={t.search}
           placeholder={t.searchPlaceholder}
           value={schemaSearch}
@@ -97,14 +101,16 @@ export function SchemaSidebar({
       </label>
       <div className="section-label">
         <Table2 size={13} /> {t.tables} <span>{sourceCubes.length}</span>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button"
           aria-label={t.refresh}
           disabled={busy || !selectedSource}
           onClick={onDiscover}
         >
           <RefreshCw size={14} className={busy ? "spin" : ""} />
-        </button>
+        </Button>
       </div>
       <div className="schema-table-list">
         {sourceCubes
@@ -114,7 +120,9 @@ export function SchemaSidebar({
               .includes(schemaSearch.toLowerCase()),
           )
           .map((item) => (
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               key={item.id}
               disabled={busy}
               aria-pressed={selected === item.id}
@@ -127,7 +135,7 @@ export function SchemaSidebar({
                 <small>{item.definition.table}</small>
               </span>
               <ChevronRight size={14} />
-            </button>
+            </Button>
           ))}
         {!sourceCubes.length && (
           <p className="sidebar-hint">
@@ -160,7 +168,9 @@ export function SchemaSidebar({
               </div>
             ))}
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="plain"
             className="secondary"
             disabled={busy}
             onClick={() => {
@@ -169,7 +179,7 @@ export function SchemaSidebar({
             }}
           >
             {t.viewSchema} <ChevronRight size={14} />
-          </button>
+          </Button>
         </div>
       )}
       <div className="schema-sidebar-footer">
@@ -178,7 +188,9 @@ export function SchemaSidebar({
           {t.more}
           <small>{t.moreHint}</small>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button"
           aria-label={t.add}
           disabled={busy}
@@ -188,7 +200,7 @@ export function SchemaSidebar({
           }}
         >
           <Plus size={18} />
-        </button>
+        </Button>
       </div>
     </aside>
   );

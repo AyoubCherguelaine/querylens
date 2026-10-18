@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { Check, FileSpreadsheet, LoaderCircle, Upload, X } from "lucide-react";
 import {
@@ -83,14 +85,16 @@ export function ImportData({
           <h2 id="import-title">{t.title}</h2>
           <p className="muted">{t.text}</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="icon-button"
           onClick={onCancel}
           disabled={busy}
           aria-label={t.close}
         >
           <X size={20} />
-        </button>
+        </Button>
       </div>
       <input
         ref={input}
@@ -104,7 +108,9 @@ export function ImportData({
           if (candidate) void inspect(candidate);
         }}
       />
-      <button
+      <Button
+        variant="ghost"
+        size="plain"
         className={`upload-zone ${busy ? "upload-busy" : ""}`}
         disabled={busy}
         onClick={() => input.current?.click()}
@@ -133,7 +139,7 @@ export function ImportData({
         </strong>
         <span>{t.limits(megabytes, limits.max_rows.toLocaleString(intl))}</span>
         <small>{t.hint}</small>
-      </button>
+      </Button>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -144,7 +150,7 @@ export function ImportData({
           <div className="import-options">
             <label>
               {t.schemaName}
-              <input
+              <Input
                 required
                 value={schema}
                 maxLength={200}
@@ -156,7 +162,7 @@ export function ImportData({
             {preview.kind === "csv" && (
               <label>
                 {t.tableName}
-                <input
+                <Input
                   required
                   maxLength={200}
                   value={tableName}
@@ -177,7 +183,9 @@ export function ImportData({
               </span>
             </h3>
             {preview.tables.length > 1 && (
-              <button
+              <Button
+                variant="ghost"
+                size="plain"
                 type="button"
                 className="text-button"
                 disabled={busy}
@@ -192,7 +200,7 @@ export function ImportData({
                 {selected.length === preview.tables.length
                   ? t.deselectAll
                   : t.selectAll}
-              </button>
+              </Button>
             )}
           </div>
           {preview.tables.map((table) => (
@@ -290,14 +298,17 @@ export function ImportData({
             <span>
               <Check size={15} /> {t.previewOnly}
             </span>
-            <button
+            <Button
+              variant="default"
+              size="plain"
+              type="submit"
               className="primary"
               disabled={
                 busy || !selected.length || !schema.trim() || !tableName.trim()
               }
             >
               {busy ? t.importingShort : t.importTables(selected.length)}
-            </button>
+            </Button>
           </div>
         </form>
       )}

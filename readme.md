@@ -143,6 +143,13 @@ frontend/                    Next.js App Router, cookie proxy, responsive UI
 agents/                      Legacy class import paths, backed by the new services
 ```
 
+The frontend uses shadcn/ui controls in `frontend/components/ui`, configured by
+`frontend/components.json`. The chat follows the shadcn Chat pattern using Message
+Scroller, Message/Bubble, Input Group, and Trace. Streamdown renders model Markdown
+in both answers and reports. The existing FastAPI NDJSON stream supplies tool events
+and final results; no separate AI SDK backend is required. Add further UI components
+with `npx shadcn@latest add <component>` from `frontend/`.
+
 PostgreSQL stores users, owned source records and import manifests, cube definitions as JSONB, sessions, and immutable message results. UUID identities and foreign keys replace MongoDB ObjectIds. Passwords use Argon2; JWTs require an expiry, subject, and audience. Source/cube/session operations enforce ownership. Imported schemas are private to their owner. Existing configured analytics schemas are shared with registered analysts: saved-object ownership is **not** row-level source isolation for those shared schemas. Use separate deployments/source credentials for different data access boundaries.
 
 Structured logs go to stdout as JSON with request IDs, status, latency, model/token usage, and result counts. Agent step logs include the tool name, step ID, completion/failure status and duration; inspect failed tool details in the private conversation evidence. Responses carry `X-Request-ID`. Logs intentionally exclude passwords, tokens, DSNs, prompts, filter values, result rows, and provider error bodies. SQL parameters and query results are stored as private session evidence in PostgreSQL, so apply your normal database retention and access policy.

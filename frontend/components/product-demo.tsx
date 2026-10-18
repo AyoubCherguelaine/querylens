@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   ArrowUpRight,
@@ -23,7 +24,11 @@ export function ProductDemo() {
   const summary =
     question.id === "trend"
       ? t.trendSummary(result.percent)
-      : t.shareSummary(result.leader, result.percent, question.id === "channels");
+      : t.shareSummary(
+          result.leader,
+          result.percent,
+          question.id === "channels",
+        );
   const max = Math.max(...result.rows.map((row) => row.value));
   const format = (value: number) =>
     question.id === "channels"
@@ -35,11 +40,7 @@ export function ProductDemo() {
           maximumFractionDigits: 0,
         }).format(value);
   return (
-    <section
-      className="product-demo"
-      id="demo"
-      aria-label={t.label}
-    >
+    <section className="product-demo" id="demo" aria-label={t.label}>
       <div className="demo-toolbar">
         <div className="demo-window-dots" aria-hidden="true">
           <i />
@@ -58,7 +59,9 @@ export function ProductDemo() {
         <aside className="demo-chats" aria-label={t.questionsLabel}>
           <span className="demo-sidebar-label">{t.tryQuestion}</span>
           {demoQuestions.map((item, index) => (
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               key={item.id}
               onClick={() => setSelected(index)}
               className={selected === index ? "active" : ""}
@@ -66,7 +69,7 @@ export function ProductDemo() {
             >
               <MessageSquare size={13} />
               <span>{t.questions[item.id]}</span>
-            </button>
+            </Button>
           ))}
           <div className="demo-sidebar-note">
             <Play size={14} />
@@ -100,9 +103,7 @@ export function ProductDemo() {
             <figure
               className={`demo-chart ${question.id === "trend" ? "monthly" : ""}`}
             >
-              <figcaption>
-                {t.chartCaption(metric, question.field)}
-              </figcaption>
+              <figcaption>{t.chartCaption(metric, question.field)}</figcaption>
               <ul>
                 {result.rows.map((row, index) => (
                   <li key={row.label}>

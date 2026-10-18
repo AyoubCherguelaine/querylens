@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { ArrowRight, Database } from "lucide-react";
 import { api } from "@/lib/api";
@@ -67,12 +69,12 @@ export function AuthForm({
           {signup && (
             <label>
               {t.fullName}
-              <input name="name" autoComplete="name" maxLength={100} />
+              <Input name="name" autoComplete="name" maxLength={100} />
             </label>
           )}
           <label>
             {t.email}
-            <input
+            <Input
               name="email"
               type="email"
               required
@@ -82,7 +84,7 @@ export function AuthForm({
           </label>
           <label>
             {t.password}
-            <input
+            <Input
               name="password"
               type="password"
               required
@@ -97,12 +99,20 @@ export function AuthForm({
               {error}
             </p>
           )}
-          <button className="primary" disabled={busy}>
+          <Button
+            variant="default"
+            size="plain"
+            type="submit"
+            className="primary"
+            disabled={busy}
+          >
             {busy ? t.connecting : signup ? t.createAccount : t.enter}
             <ArrowRight size={17} />
-          </button>
+          </Button>
         </form>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           className="text-button"
           onClick={() => {
             setSignup(!signup);
@@ -110,7 +120,7 @@ export function AuthForm({
           }}
         >
           {signup ? t.haveAccount : t.newHere}
-        </button>
+        </Button>
       </section>
     </main>
   );

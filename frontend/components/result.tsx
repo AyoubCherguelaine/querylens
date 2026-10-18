@@ -1,7 +1,9 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2, Download, Info } from "lucide-react";
 import type { Result } from "@/lib/api";
 import { AgentSteps } from "./agent-steps";
+import { Markdown } from "./markdown";
 import { WrittenAnalysis } from "./written-analysis";
 import { useT } from "@/lib/i18n/client";
 
@@ -21,22 +23,6 @@ export function AnalysisResult({ result }: { result: Result }) {
   }
   return (
     <article className="result">
-      <div className="result-heading">
-        {result.status === "answered" ? (
-          <CheckCircle2 size={16} />
-        ) : (
-          <Info size={16} />
-        )}
-        <span>
-          {result.status === "answered"
-            ? t.answer
-            : result.status === "clarification" ? t.clarification : t.stopped}
-        </span>
-        {result.duration_ms !== undefined && (
-          <small>{t.ms(result.duration_ms)}</small>
-        )}
-      </div>
-      {result.report ? <WrittenAnalysis report={result.report} /> : <p dir="auto">{result.answer}</p>}
       <AgentSteps steps={result.steps || []} />
       {!!result.rows?.length && (
         <div className="table-scroll">
@@ -66,22 +52,22 @@ export function AnalysisResult({ result }: { result: Result }) {
           </table>
         </div>
       )}
-      {result.truncated && (
-        <p className="notice">
-          {t.truncated}
-        </p>
-      )}
+      {result.truncated && <p className="notice">{t.truncated}</p>}
       {(result.sql || result.steps?.length) && (
         <>
           <div className="evidence">
             <details>
               <summary>{result.sql ? t.inspectQuery : t.inspectAgent}</summary>
-              {result.sql && <>
-                <pre>{result.sql}</pre>
-                <p>{t.parameters}</p>
-                <pre>{JSON.stringify(result.parameters, null, 2)}</pre>
-              </>}
-              {result.error && <pre>{JSON.stringify(result.error, null, 2)}</pre>}
+              {result.sql && (
+                <>
+                  <pre>{result.sql}</pre>
+                  <p>{t.parameters}</p>
+                  <pre>{JSON.stringify(result.parameters, null, 2)}</pre>
+                </>
+              )}
+              {result.error && (
+                <pre>{JSON.stringify(result.error, null, 2)}</pre>
+              )}
               <p>
                 {result.sql ? t.executed : t.finished}{" "}
                 {result.executed_at
@@ -95,16 +81,42 @@ export function AnalysisResult({ result }: { result: Result }) {
                 </p>
               ))}
             </details>
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               className="icon-button"
               onClick={download}
               aria-label={t.download}
             >
               <Download size={17} />
-            </button>
+            </Button>
           </div>
         </>
       )}
+      <div className="assistant-answer">
+        <div className="result-heading">
+          {result.status === "answered" ? (
+            <CheckCircle2 size={16} />
+          ) : (
+            <Info size={16} />
+          )}
+          <span>
+            {result.status === "answered"
+              ? t.answer
+              : result.status === "clarification"
+                ? t.clarification
+                : t.stopped}
+          </span>
+          {result.duration_ms !== undefined && (
+            <small>{t.ms(result.duration_ms)}</small>
+          )}
+        </div>
+        {result.report ? (
+          <WrittenAnalysis report={result.report} />
+        ) : (
+          <Markdown>{result.answer}</Markdown>
+        )}
+      </div>
     </article>
   );
 }

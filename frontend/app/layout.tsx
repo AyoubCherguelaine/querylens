@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./shadcn.css";
 import "./globals.css";
 import "./workspace.css";
 import "./landing.css";
