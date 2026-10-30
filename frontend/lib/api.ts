@@ -69,11 +69,36 @@ export type WrittenReport = {
     executed_at?: string;
   }[];
 };
+export type ChartSource = {
+  name: string;
+  sql?: string;
+  row_count: number;
+  download_name: string;
+  columns: { key: string; label: string }[];
+  rows: Record<string, unknown>[];
+  csv_data?: string;
+  exported_at?: string;
+};
+export type ChartSpec = {
+  title: string;
+  chart_type: "bar" | "line" | "area" | "pie" | "scatter";
+  description: string;
+  x_key: string;
+  y_keys: string[];
+  x_label?: string;
+  y_label?: string;
+  evidence_id: string;
+  sql?: string;
+  rows: Record<string, unknown>[];
+  columns: { key: string; label: string }[];
+  data_source: ChartSource;
+};
 export type Result = {
   status: "answered" | "clarification" | "error" | "limit_reached";
   steps?: AgentStep[];
   answer: string;
   report?: WrittenReport;
+  chart?: ChartSpec;
   error?: {
     error: string;
     code: string;

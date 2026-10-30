@@ -43,5 +43,5 @@ async def test_scope_deduplicates_and_preserves_primary(monkeypatch):
 
 async def test_scope_limit_precedes_database_work():
     with pytest.raises(HTTPException) as error:
-        await resolve_cubes(None, uuid4(), uuid4(), [uuid4() for _ in range(20)])
+        await resolve_cubes(None, uuid4(), uuid4(), [uuid4() for _ in range(50)])
     assert error.value.status_code == 422

@@ -15,6 +15,7 @@ from openai import AsyncOpenAI, OpenAIError
 from backend.services.agent_sql import FUNCTIONS, query_source
 from backend.services.catalog import discover
 from backend.services.compiler import quote
+from backend.services.graph_agent import create_graph
 from backend.services.narrative import query_evidence, write_analysis
 from backend.services.planner import PlannerUnavailable
 
@@ -41,6 +42,10 @@ If the question is ambiguous, call ask_user. Stop and wait for the user's next m
 Use finish with a clear answer when done, including material assumptions and limits.
 When the user requests a report, written analysis, executive summary or other human text,
 or a narrative would make analytical findings clearer, use write_analysis as the final response.
+When the user asks for a chart, graph, visualization, plot, or visual comparison, or when
+displaying numerical metrics across categories or time would make the findings clearer visually,
+use create_graph as the final response. Choose the appropriate chart_type (bar, line, area, pie, scatter),
+set x_key for categories or time, y_keys for numeric metrics, and copy the query evidence_id.
 Write natural, specific prose in the user's language. Explain what the data shows and why
 it matters. Separate observed findings, possible interpretations and suggested next steps.
 Do not invent causes, trends, business definitions or recommendations unsupported by data.
@@ -111,6 +116,24 @@ TOOLS = [
                 },
             },
             "evidence_ids": {"type": "array", "items": STRING},
+        },
+    ),
+    function(
+        "create_graph",
+        "Generate a visual graph or chart (bar, line, area, pie, or scatter) grounded in query evidence, "
+        "rendered interactively in the frontend with a special downloadable data source. This completes the turn.",
+        {
+            "title": STRING,
+            "chart_type": {
+                "type": "string",
+                "enum": ["bar", "line", "area", "pie", "scatter"],
+            },
+            "description": STRING,
+            "x_key": STRING,
+            "y_keys": {"type": "array", "items": STRING},
+            "x_label": STRING,
+            "y_label": STRING,
+            "evidence_id": STRING,
         },
     ),
     function(
@@ -210,6 +233,15 @@ def history_context(history):
                 {**item, "rows": item.get("rows", [])[:5]}
                 for item in saved["report"].get("evidence", [])
             ]
+        if not queries and saved.get("chart"):
+            queries = [
+                {
+                    "sql": saved["chart"].get("sql", ""),
+                    "columns": saved["chart"].get("columns", []),
+                    "rows": saved["chart"].get("rows", [])[:5],
+                    "row_count": len(saved["chart"].get("rows", [])),
+                }
+            ]
         for query_index, query in enumerate(queries):
             query["evidence_id"] = f"history-{turn_index}-query-{query_index}"
         result.append(
@@ -221,6 +253,16 @@ def history_context(history):
                 "report": (
                     {"title": saved["report"]["title"], "sections": saved["report"]["sections"]}
                     if saved.get("report")
+                    else None
+                ),
+                "chart": (
+                    {
+                        "title": saved["chart"]["title"],
+                        "chart_type": saved["chart"]["chart_type"],
+                        "x_key": saved["chart"]["x_key"],
+                        "y_keys": saved["chart"]["y_keys"],
+                    }
+                    if saved.get("chart")
                     else None
                 ),
             }
@@ -323,7 +365,7 @@ async def run_agent(pool, settings, cube, question, history, emit=None, *, selec
                     messages.append(
                         {
                             "role": "user",
-                            "content": "Use finish, write_analysis or ask_user to respond.",
+                            "content": "Use finish, write_analysis, create_graph or ask_user to respond.",
                         }
                     )
                     continue
@@ -355,6 +397,26 @@ async def run_agent(pool, settings, cube, question, history, emit=None, *, selec
                             )
                             await publish(step)
                             return {**outcome("answered", report["summary"]), "report": report}
+                        if call.name == "create_graph":
+                            graph = create_graph(args, query_evidence(steps, history_data))
+                            step.update(
+                                status="completed",
+                                output={
+                                    "title": graph["title"],
+                                    "chart_type": graph["chart_type"],
+                                    "row_count": len(graph["rows"]),
+                                    "evidence_id": graph["evidence_id"],
+                                },
+                                duration_ms=round((time.monotonic() - tick) * 1000),
+                            )
+                            await publish(step)
+                            return {
+                                **outcome("answered", graph["description"]),
+                                "chart": graph,
+                                "rows": graph["rows"],
+                                "columns": graph["columns"],
+                                "sql": graph["sql"],
+                            }
                         if call.name in {"finish", "ask_user"}:
                             field = "answer" if call.name == "finish" else "question"
                             answer = args.get(field)

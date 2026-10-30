@@ -1,8 +1,10 @@
 "use client";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Download, Info } from "lucide-react";
-import type { Result } from "@/lib/api";
+import { BarChart3, CheckCircle2, Download, Info, Table2 } from "lucide-react";
+import type { ChartSpec, Result } from "@/lib/api";
 import { AgentSteps } from "./agent-steps";
+import { GraphView } from "./graph-view";
 import { Markdown } from "./markdown";
 import { WrittenAnalysis } from "./written-analysis";
 import { useT } from "@/lib/i18n/client";
@@ -10,6 +12,60 @@ import { useT } from "@/lib/i18n/client";
 export function AnalysisResult({ result }: { result: Result }) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.result;
+  const graphT = dictionary.graph;
+
+  const autoChart: ChartSpec | null = useMemo(() => {
+    if (result.chart) return result.chart;
+    if (
+      !result.rows ||
+      result.rows.length < 2 ||
+      !result.columns ||
+      result.columns.length < 2
+    )
+      return null;
+    const cols = result.columns;
+    const firstRow = result.rows[0];
+    const numCols = cols.filter((c) => {
+      const val = firstRow[c.key];
+      return (
+        typeof val === "number" ||
+        (!isNaN(Number(val)) && val !== null && val !== "")
+      );
+    });
+    if (!numCols.length) return null;
+    const nonNumCols = cols.filter(
+      (c) => !numCols.some((nc) => nc.key === c.key),
+    );
+    const xCol = nonNumCols[0] || cols[0];
+    const yCol = numCols.find((nc) => nc.key !== xCol.key) || numCols[0];
+    return {
+      title: result.answer ? result.answer.slice(0, 60) : "Data Visualization",
+      chart_type: "bar",
+      description: "",
+      x_key: xCol.key,
+      y_keys: [yCol.key],
+      x_label: xCol.label,
+      y_label: yCol.label,
+      evidence_id: "direct",
+      sql: result.sql,
+      rows: result.rows,
+      columns: cols,
+      data_source: {
+        name: "Query Results",
+        sql: result.sql,
+        row_count: result.rows.length,
+        download_name: "query_results_data_source.csv",
+        columns: cols,
+        rows: result.rows,
+      },
+    };
+  }, [result]);
+
+  const activeChart = result.chart || autoChart;
+  const [displayMode, setDisplayMode] = useState<"graph" | "table">(
+    result.chart ? "graph" : "table",
+  );
+
   function download() {
     const blob = new Blob([JSON.stringify(result, null, 2)], {
       type: "application/json",
@@ -24,33 +80,81 @@ export function AnalysisResult({ result }: { result: Result }) {
   return (
     <article className="result">
       <AgentSteps steps={result.steps || []} />
-      {!!result.rows?.length && (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {result.columns?.map((c) => (
-                  <th key={c.key}>{c.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {result.rows.map((row, i) => (
-                <tr key={i}>
-                  {result.columns?.map((c) => (
-                    <td key={c.key}>
-                      {row[c.key] === null ? (
-                        <span className="muted">NULL</span>
-                      ) : (
-                        String(row[c.key])
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+      {/* Graph and Table Display */}
+      {activeChart && displayMode === "graph" ? (
+        <div className="result-graph-section">
+          {!!result.rows?.length && (
+            <div className="result-view-toggle">
+              <Button
+                variant="ghost"
+                size="plain"
+                className="active"
+                onClick={() => setDisplayMode("graph")}
+              >
+                <BarChart3 size={14} /> {graphT.viewGraph}
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                onClick={() => setDisplayMode("table")}
+              >
+                <Table2 size={14} /> {graphT.viewTable}
+              </Button>
+            </div>
+          )}
+          <GraphView chart={activeChart} />
         </div>
+      ) : (
+        !!result.rows?.length && (
+          <div className="result-table-section">
+            {activeChart && (
+              <div className="result-view-toggle">
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  onClick={() => setDisplayMode("graph")}
+                >
+                  <BarChart3 size={14} /> {graphT.viewGraph}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  className="active"
+                  onClick={() => setDisplayMode("table")}
+                >
+                  <Table2 size={14} /> {graphT.viewTable}
+                </Button>
+              </div>
+            )}
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    {result.columns?.map((c) => (
+                      <th key={c.key}>{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.rows.map((row, i) => (
+                    <tr key={i}>
+                      {result.columns?.map((c) => (
+                        <td key={c.key}>
+                          {row[c.key] === null ? (
+                            <span className="muted">NULL</span>
+                          ) : (
+                            String(row[c.key])
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
       )}
       {result.truncated && <p className="notice">{t.truncated}</p>}
       {!!(result.sql || result.steps?.length) && (

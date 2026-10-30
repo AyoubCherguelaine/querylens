@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
+  BarChart3,
   Box,
   ChevronRight,
   Database,
@@ -808,6 +809,19 @@ export function Workspace() {
                               variant="ghost"
                               size="plain"
                               disabled={busy}
+                              onClick={() => setQuestion(t.plotGraphPrompt)}
+                            >
+                              <BarChart3 size={17} />
+                              <span>
+                                {t.plotGraph}
+                                <small>{t.plotGraphHint}</small>
+                              </span>
+                              <ChevronRight size={16} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="plain"
+                              disabled={busy}
                               onClick={() => setQuestion(t.writeAnalysisPrompt)}
                             >
                               <Sparkles size={17} />
@@ -830,6 +844,25 @@ export function Workspace() {
                               </span>
                               <ChevronRight size={16} />
                             </Button>
+                            {sourceCubes.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="plain"
+                                disabled={busy}
+                                onClick={() => {
+                                  void changeChatTables(
+                                    sourceCubes.map((c) => c.id),
+                                  );
+                                }}
+                              >
+                                <Layers3 size={17} />
+                                <span>
+                                  {t.allTablesAction(sourceCubes.length)}
+                                  <small>{t.allTablesActionHint}</small>
+                                </span>
+                                <ChevronRight size={16} />
+                              </Button>
+                            )}
                             {suggestedDimension && (
                               <Button
                                 variant="ghost"

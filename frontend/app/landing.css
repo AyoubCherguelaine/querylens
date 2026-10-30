@@ -13,7 +13,7 @@
 .landing-page button:focus-visible,
 .landing-page summary:focus-visible,
 .auth-back:focus-visible {
-  outline: 3px solid #91a9f1;
+  outline: 3px solid #7ed3e6;
   outline-offset: 5px;
 }
 .landing-skip {
@@ -65,13 +65,13 @@
 }
 .landing-page a.primary {
   color: white;
-  background: #4264d5;
-  box-shadow: 0 3px 8px #4264d518;
+  background: #20a7c9;
+  box-shadow: 0 3px 8px rgba(32, 167, 201, 0.25);
   font-size: 12px;
   min-height: 42px;
 }
 .landing-page a.primary:hover {
-  background: #3456bf;
+  background: #198fa8;
 }
 .landing-hero {
   position: relative;
@@ -92,8 +92,8 @@
   inset-inline: 20% -200px;
   background: radial-gradient(
     ellipse at 65% 40%,
-    #eef2ff 0%,
-    #f7f9ff 36%,
+    #e8f7fa 0%,
+    #f7fafb 36%,
     transparent 70%
   );
 }
@@ -127,7 +127,7 @@
   margin: 24px 0;
 }
 .landing-hero h1 > span {
-  color: #4264d5;
+  color: #20a7c9;
 }
 .landing-hero-copy > p {
   font-size: 15px;
@@ -157,7 +157,7 @@
 .landing-demo-link > span {
   display: grid;
   place-items: center;
-  border: 1px solid #dfe6f5;
+  border: 1px solid #c2eaf1;
   border-radius: 50%;
   width: 29px;
   height: 29px;
@@ -319,12 +319,12 @@
   margin-top: 2px;
 }
 .demo-chats > button:hover {
-  background: #e8eefb;
+  background: #e8f4f7;
 }
 .demo-chats > button.active {
-  background: #e5ecff;
-  color: #4264d5;
-  border-color: #dce5fd;
+  background: #e8f7fa;
+  color: #20a7c9;
+  border-color: #bce9f2;
 }
 .demo-sidebar-note {
   display: flex;
@@ -546,8 +546,8 @@
   color: #7284a3;
 }
 .demo-table-name {
-  color: #4264d5;
-  background: #edf2ff;
+  color: #20a7c9;
+  background: #e8f7fa;
   margin: 0 -4px;
   padding: 7px 4px;
   border-radius: 4px;
@@ -563,7 +563,7 @@
   color: #b4bfd1;
 }
 .demo-field.active {
-  color: #4264d5;
+  color: #20a7c9;
   font-weight: 600;
 }
 .demo-schema > small {
@@ -653,8 +653,8 @@
   border-radius: 10px;
   display: grid;
   place-items: center;
-  background: #edf2ff;
-  color: #6885d4;
+  background: #e8f7fa;
+  color: #147a90;
 }
 .landing-step-top small {
   font-size: 11px;

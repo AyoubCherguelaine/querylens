@@ -7,8 +7,8 @@ from backend.api.dependencies import cube_pool, owned_cube
 
 async def resolve_cubes(request, owner_id, primary_id, cube_ids):
     ids = list(dict.fromkeys([primary_id, *cube_ids]))
-    if len(ids) > 20:
-        raise HTTPException(422, "Select at most 20 tables per chat.")
+    if len(ids) > 50:
+        raise HTTPException(422, "Select at most 50 tables per chat.")
     cubes = [await owned_cube(request, cube_id, owner_id) for cube_id in ids]
     pool = cube_pool(request, cubes[0])
     if any(cube_pool(request, cube) is not pool for cube in cubes[1:]):
