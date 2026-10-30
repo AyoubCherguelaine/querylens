@@ -300,6 +300,9 @@
 .demo-chats > button {
   display: flex;
   align-items: start;
+  justify-content: flex-start;
+  white-space: normal;
+  min-width: 0;
   gap: 6px;
   padding: 10px 7px;
   margin-bottom: 6px;
