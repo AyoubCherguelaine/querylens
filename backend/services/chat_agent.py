@@ -44,8 +44,22 @@ When the user requests a report, written analysis, executive summary or other hu
 or a narrative would make analytical findings clearer, use write_analysis as the final response.
 When the user asks for a chart, graph, visualization, plot, or visual comparison, or when
 displaying numerical metrics across categories or time would make the findings clearer visually,
-use create_graph as the final response. Choose the appropriate chart_type (bar, line, area, pie, scatter),
-set x_key for categories or time, y_keys for numeric metrics, and copy the query evidence_id.
+use create_graph as the final response.
+Choose the appropriate chart_type (bar, line, area, pie, scatter):
+- bar: for discrete categorical comparisons, rankings, or grouped/stacked metric distributions.
+- line: for continuous trends, time series progression, or multi-series comparison over time.
+- area: for cumulative volume, magnitude over time, or stacked metric composition.
+- pie: for part-to-whole proportions and percentage distributions (best for up to 7 distinct items).
+- scatter: for examining relationships, distributions, correlations, or 3-dimensional bubble charts (X, Y, and Z bubble size).
+Multi-dimensional charting (3 dimensions):
+- 1st dimension (x_key): primary category or time interval.
+- 2nd dimension (y_keys): numeric metric(s) to plot on the Y-axis.
+- 3rd dimension (z_key): optional breakdown dimension (e.g. region, category, segment) for multi-series grouping, stacked bars/areas, or scatter bubble size. Pass "" if no 3rd dimension is needed.
+- group_mode: set to "grouped" or "stacked" when using multiple series or a 3rd dimension breakdown.
+Keep categorical X-axis elements concise: limit X to at most 12 elements (e.g. use LIMIT 12 or aggregate
+top categories) so the chart remains readable without crowding the axis.
+Y values can scale to thousands (k's), millions (M's), or larger; numerical metrics will format thousands cleanly.
+Set x_key for categories or time, y_keys for numeric metrics, and copy the query evidence_id.
 Write natural, specific prose in the user's language. Explain what the data shows and why
 it matters. Separate observed findings, possible interpretations and suggested next steps.
 Do not invent causes, trends, business definitions or recommendations unsupported by data.
@@ -121,7 +135,8 @@ TOOLS = [
     function(
         "create_graph",
         "Generate a visual graph or chart (bar, line, area, pie, or scatter) grounded in query evidence, "
-        "rendered interactively in the frontend with a special downloadable data source. This completes the turn.",
+        "supporting multi-dimensional data (X-axis 1st dimension, Y-axis metric(s) 2nd dimension, and optional Z-axis 3rd dimension "
+        "for series breakdown, grouped/stacked bars, or bubble size). Rendered with Recharts and interactive filtering. This completes the turn.",
         {
             "title": STRING,
             "chart_type": {
@@ -131,6 +146,15 @@ TOOLS = [
             "description": STRING,
             "x_key": STRING,
             "y_keys": {"type": "array", "items": STRING},
+            "z_key": {
+                "type": "string",
+                "description": "Optional 3rd dimension (e.g. region, category, channel) for breakdown/series grouping or bubble size in scatter. Pass empty string if none.",
+            },
+            "group_mode": {
+                "type": "string",
+                "enum": ["grouped", "stacked"],
+                "description": "Grouping mode for multi-series bar or area charts: 'grouped' or 'stacked'.",
+            },
             "x_label": STRING,
             "y_label": STRING,
             "evidence_id": STRING,
@@ -261,6 +285,8 @@ def history_context(history):
                         "chart_type": saved["chart"]["chart_type"],
                         "x_key": saved["chart"]["x_key"],
                         "y_keys": saved["chart"]["y_keys"],
+                        "z_key": saved["chart"].get("z_key"),
+                        "group_mode": saved["chart"].get("group_mode", "grouped"),
                     }
                     if saved.get("chart")
                     else None
@@ -422,6 +448,8 @@ async def run_agent(
                                 output={
                                     "title": graph["title"],
                                     "chart_type": graph["chart_type"],
+                                    "z_key": graph.get("z_key"),
+                                    "group_mode": graph.get("group_mode", "grouped"),
                                     "row_count": len(graph["rows"]),
                                     "evidence_id": graph["evidence_id"],
                                 },

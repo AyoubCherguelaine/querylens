@@ -85,8 +85,11 @@ export type ChartSpec = {
   description: string;
   x_key: string;
   y_keys: string[];
+  z_key?: string | null;
+  group_mode?: "grouped" | "stacked";
   x_label?: string;
   y_label?: string;
+  z_label?: string;
   evidence_id: string;
   sql?: string;
   rows: Record<string, unknown>[];

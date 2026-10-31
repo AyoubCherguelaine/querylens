@@ -280,3 +280,45 @@ async def test_dynamic_model_credits_deduction():
     )
     assert new_balance == 55
 
+
+def test_settings_quotas_default_unlimited():
+    from backend.core.config import Settings
+    from pydantic import SecretStr
+
+    s = Settings(
+        database_url=SecretStr("postgresql://u:p@localhost/db"),
+        jwt_secret=SecretStr("a" * 32),
+    )
+    # Default quotas must be None (unlimited), relying on credits until the end
+    assert s.max_chat_sessions is None
+    assert s.max_questions_per_session is None
+
+
+@pytest.mark.asyncio
+async def test_unlimited_questions_use_credits_until_exhausted():
+    """Verify that user can ask more than 3 questions continuously until credits are depleted."""
+    conn = AsyncMock()
+    user_id = uuid4()
+    current_credits = 100
+    question_cost = QUESTION_COST  # 5 credits per question
+
+    # Simulate asking 20 questions (100 credits / 5 = 20 questions)
+    for q_idx in range(20):
+        current_credits -= question_cost
+        conn.fetchrow.return_value = {"credits": current_credits}
+        balance = await check_and_deduct_credits(
+            conn, user_id, question_cost, f"question:test:{q_idx}"
+        )
+        assert balance == current_credits
+
+    assert current_credits == 0
+
+    # 21st question must fail with HTTP 402 Insufficient credits
+    conn.fetchrow.return_value = None
+    conn.fetchval.return_value = 0
+    with pytest.raises(HTTPException) as exc_info:
+        await check_and_deduct_credits(conn, user_id, question_cost, "question:test:21")
+    assert exc_info.value.status_code == 402
+    assert "Insufficient credits" in exc_info.value.detail
+
+

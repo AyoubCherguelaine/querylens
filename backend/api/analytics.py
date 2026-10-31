@@ -69,15 +69,16 @@ async def new_session(body: SessionCreate, request: Request, user=Depends(curren
     session_id = uuid4()
     async with request.app.state.db.acquire() as connection:
         async with connection.transaction():
-            # Lock the user row so concurrent requests cannot both pass the quota check.
-            await connection.execute(
-                "SELECT 1 FROM chat_olap.users WHERE id=$1 FOR UPDATE", user["id"]
-            )
-            count = await connection.fetchval(
-                "SELECT count(*) FROM chat_olap.sessions WHERE owner_id=$1", user["id"]
-            )
-            if count >= limit:
-                raise HTTPException(409, f"This account has reached the {limit}-chat limit.")
+            if limit is not None:
+                # Lock the user row so concurrent requests cannot both pass the quota check.
+                await connection.execute(
+                    "SELECT 1 FROM chat_olap.users WHERE id=$1 FOR UPDATE", user["id"]
+                )
+                count = await connection.fetchval(
+                    "SELECT count(*) FROM chat_olap.sessions WHERE owner_id=$1", user["id"]
+                )
+                if count >= limit:
+                    raise HTTPException(409, f"This account has reached the {limit}-chat limit.")
             await connection.execute(
                 "INSERT INTO chat_olap.sessions(id,owner_id,cube_id) VALUES($1,$2,$3)",
                 session_id,
@@ -153,7 +154,11 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
     if not settings.openai_api_key.get_secret_value():
         raise HTTPException(503, "Configure OPENAI_API_KEY to use the conversational agent.")
     limit = settings.max_questions_per_session
-    limit_message = f"This chat has reached the {limit}-question limit. Start a new chat."
+    limit_message = (
+        f"This chat has reached the {limit}-question limit. Start a new chat."
+        if limit is not None
+        else ""
+    )
 
     user_model = (user.get("model_settings") or {}).get("model") or settings.openai_model
     question_cost = get_model_credit_cost(user_model, default_cost=QUESTION_COST)
@@ -167,11 +172,12 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 402,
                 f"Insufficient credits. Asking a question with {user_model} requires {question_cost} credits, but your current balance is {user_credits}.",
             )
-        asked = await connection.fetchval(
-            "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
-        )
-        if asked >= limit:
-            raise HTTPException(409, limit_message)
+        if limit is not None:
+            asked = await connection.fetchval(
+                "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
+            )
+            if asked >= limit:
+                raise HTTPException(409, limit_message)
         previous = await connection.fetch(
             """SELECT question,result FROM (
                 SELECT question,result,created_at,id FROM chat_olap.messages
@@ -201,11 +207,12 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 await connection.execute(
                     "SELECT 1 FROM chat_olap.sessions WHERE id=$1 FOR UPDATE", session_id
                 )
-                asked = await connection.fetchval(
-                    "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
-                )
-                if asked >= limit:
-                    raise HTTPException(409, limit_message)
+                if limit is not None:
+                    asked = await connection.fetchval(
+                        "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
+                    )
+                    if asked >= limit:
+                        raise HTTPException(409, limit_message)
                 remaining_credits = await check_and_deduct_credits(
                     connection, user["id"], question_cost, f"question:{user_model}:{body.question[:30]}"
                 )

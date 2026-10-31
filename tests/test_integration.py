@@ -188,6 +188,8 @@ def test_chat_persistence_refusal_and_provider_failure(client, monkeypatch):
     from pydantic import SecretStr
 
     client.app.state.settings.openai_api_key = SecretStr("test-key")
+    client.app.state.settings.max_chat_sessions = 10
+    client.app.state.settings.max_questions_per_session = 3
 
     async def planned(pool, settings, definition, question, history, emit, *, selected_cubes):
         from backend.services.analysis import execute_plan
@@ -271,6 +273,8 @@ def test_agent_stream_tools_history_and_source_scope(client, monkeypatch):
     cube_id = discover(client, headers)
     session = client.post("/chat/session", headers=headers, json={"cube_id": cube_id}).json()["id"]
     client.app.state.settings.openai_api_key = SecretStr("test-key")
+    client.app.state.settings.max_chat_sessions = 10
+    client.app.state.settings.max_questions_per_session = 3
     provider = AsyncMock()
     provider.__aenter__.return_value = provider
     provider.responses.create.side_effect = [
@@ -330,6 +334,8 @@ def test_written_analysis_persists_and_supports_followup(client, monkeypatch):
     cube_id = discover(client, headers)
     session = client.post("/chat/session", headers=headers, json={"cube_id": cube_id}).json()["id"]
     client.app.state.settings.openai_api_key = SecretStr("test-key")
+    client.app.state.settings.max_chat_sessions = 10
+    client.app.state.settings.max_questions_per_session = 3
     provider = AsyncMock()
     provider.__aenter__.return_value = provider
     report = draft(["call-0"])
@@ -365,6 +371,8 @@ def test_chat_and_question_quotas(client, monkeypatch):
     headers = account(client)
     cube_id = discover(client, headers)
     client.app.state.settings.openai_api_key = SecretStr("test-key")
+    client.app.state.settings.max_chat_sessions = 10
+    client.app.state.settings.max_questions_per_session = 3
 
     async def answer(pool, settings, definition, question, history, emit, *, selected_cubes):
         return {"status": "clarification", "answer": "ok"}

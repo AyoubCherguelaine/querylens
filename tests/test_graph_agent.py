@@ -211,3 +211,117 @@ async def test_agent_graph_without_evidence_returns_error_and_recovers(monkeypat
     assert step["status"] == "failed"
 
 
+def test_create_graph_3d_and_types():
+    types = ["bar", "line", "area", "pie", "scatter"]
+    for t in types:
+        args = {
+            "title": f"3D {t.title()} Chart",
+            "chart_type": t,
+            "is_3d": True,
+            "description": f"Testing 3D {t} rendering.",
+            "x_key": "category",
+            "y_keys": ["total_sales"],
+            "evidence_id": "call-0",
+        }
+        graph = create_graph(args, sample_evidence())
+        assert graph["chart_type"] == t
+        assert graph["is_3d"] is True
+
+    # Test normalization of "3d_bar" and variations
+    args_3d_str = {
+        "title": "Normalized 3D Bar",
+        "chart_type": "3d_bar",
+        "description": "Prefix 3d bar",
+        "x_key": "category",
+        "y_keys": ["total_sales"],
+        "evidence_id": "call-0",
+    }
+    graph_norm = create_graph(args_3d_str, sample_evidence())
+    assert graph_norm["chart_type"] == "bar"
+    assert graph_norm["is_3d"] is True
+
+    # Test normalization of "3d_pie"
+    args_3d_pie = {
+        "title": "Normalized 3D Pie",
+        "chart_type": "3d-pie",
+        "description": "Hyphenated 3d pie",
+        "x_key": "category",
+        "y_keys": ["total_sales"],
+        "evidence_id": "call-0",
+    }
+    graph_pie = create_graph(args_3d_pie, sample_evidence())
+    assert graph_pie["chart_type"] == "pie"
+    assert graph_pie["is_3d"] is True
+
+
+async def test_agent_generates_3d_graph(monkeypatch):
+    from backend.services.chat_agent import run_agent
+    from tests.test_chat_agent import DEFINITIONS, mock_agent, response
+    from tests.test_planner import settings
+
+    graph_args = {
+        "title": "3D Category Distribution",
+        "chart_type": "scatter",
+        "is_3d": True,
+        "description": "3D scatter visualization of categories.",
+        "x_key": "n",
+        "y_keys": ["n"],
+        "evidence_id": "call-0",
+    }
+    client, query = mock_agent(
+        monkeypatch,
+        [
+            response(
+                "query_postgres",
+                {"sql": "SELECT count(*) AS n FROM sales.orders", "purpose": "Count"},
+                0,
+            ),
+            response("create_graph", graph_args, 1),
+        ],
+    )
+    result = await run_agent(None, settings(), DEFINITIONS[0], "Plot a 3d scatter graph", [])
+    assert result["status"] == "answered"
+    assert result["chart"]["chart_type"] == "scatter"
+    assert result["chart"]["is_3d"] is True
+    step = next(s for s in result["steps"] if s["tool"] == "create_graph")
+    assert "chart_type" in step["output"]
+
+
+def test_create_graph_three_dimensions_breakdown():
+    evidence = {
+        "call-multi": {
+            "sql": "SELECT month, region, sum(revenue) as revenue FROM sales GROUP BY month, region",
+            "rows": [
+                {"month": "Jan", "region": "North", "revenue": 5000},
+                {"month": "Jan", "region": "South", "revenue": 3000},
+                {"month": "Feb", "region": "North", "revenue": 6000},
+                {"month": "Feb", "region": "South", "revenue": 4000},
+            ],
+            "columns": [
+                {"key": "month", "label": "Month"},
+                {"key": "region", "label": "Region"},
+                {"key": "revenue", "label": "Revenue"},
+            ],
+            "row_count": 4,
+        }
+    }
+    args = {
+        "title": "Monthly Revenue by Region",
+        "chart_type": "bar",
+        "description": "3-dimensional breakdown by region over months.",
+        "x_key": "month",
+        "y_keys": ["revenue"],
+        "z_key": "region",
+        "group_mode": "stacked",
+        "evidence_id": "call-multi",
+    }
+    graph = create_graph(args, evidence)
+    assert graph["chart_type"] == "bar"
+    assert graph["x_key"] == "month"
+    assert graph["y_keys"] == ["revenue"]
+    assert graph["z_key"] == "region"
+    assert graph["group_mode"] == "stacked"
+
+
+
+

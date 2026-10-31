@@ -1,20 +1,43 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   BarChart3,
   LineChart,
   PieChart,
   AreaChart,
   ScatterChart,
+  Filter,
+  RotateCcw,
+  Search,
+  Check,
   Download,
   Database,
   FileSpreadsheet,
-  Check,
+  Layers,
   ChevronDown,
-  Info,
 } from "lucide-react";
-import type { ChartSpec, ChartSource } from "@/lib/api";
+import {
+  ResponsiveContainer,
+  BarChart as RechartsBarChart,
+  Bar,
+  LineChart as RechartsLineChart,
+  Line,
+  AreaChart as RechartsAreaChart,
+  Area,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  ScatterChart as RechartsScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  ZAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
+import type { ChartSpec } from "@/lib/api";
 import { Button } from "./ui/button";
 import { useT } from "@/lib/i18n/client";
 
@@ -27,45 +50,273 @@ const PALETTE = [
   "#0ea5e9", // Sky
   "#8b5cf6", // Violet
   "#ec4899", // Pink
+  "#14b8a6", // Teal
+  "#f97316", // Orange
 ];
+
+/** Formats numerical values cleanly with k's (thousands), M's (millions), or full decimals */
+function formatKValue(val: number | string | undefined, intl?: string): string {
+  if (val === undefined || val === null || val === "") return "";
+  const num = typeof val === "number" ? val : parseFloat(String(val));
+  if (isNaN(num)) return String(val);
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000_000) {
+    const formatted = (num / 1_000_000_000).toFixed(num % 1_000_000_000 === 0 ? 0 : 1);
+    return `${formatted}B`;
+  }
+  if (abs >= 1_000_000) {
+    const formatted = (num / 1_000_000).toFixed(num % 1_000_000 === 0 ? 0 : 1);
+    return `${formatted}M`;
+  }
+  if (abs >= 1_000) {
+    const formatted = (num / 1_000).toFixed(num % 1_000 === 0 ? 0 : 1);
+    return `${formatted}k`;
+  }
+  return typeof intl === "string" ? num.toLocaleString(intl) : num.toLocaleString();
+}
+
+type SortOption = "default" | "val_desc" | "val_asc" | "name_asc";
+type GroupMode = "grouped" | "stacked";
 
 export function GraphView({ chart }: { chart: ChartSpec }) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.graph;
   const gradientId = useId();
 
+  // Next.js hydration safety for Recharts ResponsiveContainer
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // AI chart type choice initialized, user can override
   const [activeType, setActiveType] = useState<ChartSpec["chart_type"]>(
     chart.chart_type || "bar",
   );
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  // 3rd Dimension (Breakdown) & Grouping Mode
+  const [zKey, setZKey] = useState<string | null>(chart.z_key || null);
+  const [groupMode, setGroupMode] = useState<GroupMode>(chart.group_mode || "grouped");
+
+  // Filtering states
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [minY, setMinY] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<SortOption>("default");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   const rows = chart.rows || [];
+  const columns = chart.columns || [];
   const xKey = chart.x_key;
-  const yKey = chart.y_keys?.[0] || chart.columns?.[1]?.key || "";
+  const yKeys = chart.y_keys?.length ? chart.y_keys : [columns[1]?.key || ""];
+  const primaryYKey = yKeys[0] || "";
 
-  // Extract data items
-  const data = rows.map((r, i) => {
-    const rawX = r[xKey];
-    const xVal =
-      rawX !== null && rawX !== undefined ? String(rawX) : `Item ${i + 1}`;
-    const rawY = r[yKey];
-    const numY = typeof rawY === "number" ? rawY : parseFloat(String(rawY)) || 0;
-    return {
-      index: i,
-      x: xVal,
-      y: numY,
-      raw: r,
-    };
+  // Available categorical columns that can serve as the 3rd Dimension (Breakdown)
+  const candidateZColumns = useMemo(() => {
+    return columns.filter(
+      (c) => c.key !== xKey && !yKeys.includes(c.key),
+    );
+  }, [columns, xKey, yKeys]);
+
+  // Extract raw data items
+  const rawData = useMemo(() => {
+    return rows.map((r, i) => {
+      const rawX = r[xKey];
+      const xVal = rawX !== null && rawX !== undefined ? String(rawX) : `Item ${i + 1}`;
+      const rawY = r[primaryYKey];
+      const numY = typeof rawY === "number" ? rawY : parseFloat(String(rawY)) || 0;
+      const rawZ = zKey ? r[zKey] : null;
+      const zVal = rawZ !== null && rawZ !== undefined ? String(rawZ) : null;
+      return {
+        id: `${i}-${xVal}`,
+        index: i,
+        x: xVal,
+        y: numY,
+        z: zVal,
+        raw: r,
+        color: PALETTE[i % PALETTE.length],
+      };
+    });
+  }, [rows, xKey, primaryYKey, zKey]);
+
+  // Distinct primary categories (X-axis)
+  const allCategories = useMemo(() => {
+    return Array.from(new Set(rawData.map((d) => d.x)));
+  }, [rawData]);
+
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => {
+    return new Set(allCategories);
   });
 
-  const maxY = Math.max(...data.map((d) => d.y), 0) || 1;
-  const totalY = data.reduce((acc, d) => acc + Math.max(0, d.y), 0) || 1;
+  // Default max X elements: 12 if total > 12, else total (per user constraint: max element in X is 12)
+  const defaultMaxX = allCategories.length > 12 ? 12 : allCategories.length || 12;
+  const [maxX, setMaxX] = useState<number>(defaultMaxX);
+
+  // Maximum Y in dataset
+  const rawMaxY = useMemo(() => {
+    return Math.max(...rawData.map((d) => d.y), 0) || 100;
+  }, [rawData]);
+
+  // Active filters count
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim()) count++;
+    if (selectedCategories.size < allCategories.length) count++;
+    if (minY > 0) count++;
+    if (sortBy !== "default") count++;
+    if (maxX !== defaultMaxX && maxX !== allCategories.length) count++;
+    if (zKey !== (chart.z_key || null)) count++;
+    if (groupMode !== (chart.group_mode || "grouped")) count++;
+    return count;
+  }, [searchQuery, selectedCategories, allCategories.length, minY, sortBy, maxX, defaultMaxX, zKey, chart.z_key, groupMode, chart.group_mode]);
+
+  function resetFilters() {
+    setSearchQuery("");
+    setSelectedCategories(new Set(allCategories));
+    setMinY(0);
+    setSortBy("default");
+    setMaxX(defaultMaxX);
+    setZKey(chart.z_key || null);
+    setGroupMode(chart.group_mode || "grouped");
+  }
+
+  function toggleCategory(cat: string) {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) {
+        if (next.size > 1) next.delete(cat);
+      } else {
+        next.add(cat);
+      }
+      return next;
+    });
+  }
+
+  // Multi-dimensional pivoted data processing
+  const { chartData, seriesKeys, has3D } = useMemo(() => {
+    // 1. Filter raw rows
+    const filteredRows = rawData.filter((d) => {
+      if (selectedCategories.size > 0 && !selectedCategories.has(d.x)) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        if (!d.x.toLowerCase().includes(q) && !(d.z && d.z.toLowerCase().includes(q))) {
+          return false;
+        }
+      }
+      if (d.y < minY) {
+        return false;
+      }
+      return true;
+    });
+
+    // 2. Multi-dimensional: if zKey is active (3rd dimension)
+    if (zKey) {
+      const seriesSet = new Set<string>();
+      const groupedMap = new Map<string, Record<string, any>>();
+
+      for (const item of filteredRows) {
+        const seriesName = item.z || "Other";
+        seriesSet.add(seriesName);
+
+        if (!groupedMap.has(item.x)) {
+          groupedMap.set(item.x, {
+            x: item.x,
+            _total: 0,
+            _bubbleZ: typeof item.raw[zKey] === "number" ? item.raw[zKey] : 10,
+          });
+        }
+        const record = groupedMap.get(item.x)!;
+        record[seriesName] = (record[seriesName] || 0) + item.y;
+        record._total += item.y;
+      }
+
+      let result = Array.from(groupedMap.values());
+
+      if (sortBy === "val_desc") {
+        result.sort((a, b) => (b._total || 0) - (a._total || 0));
+      } else if (sortBy === "val_asc") {
+        result.sort((a, b) => (a._total || 0) - (b._total || 0));
+      } else if (sortBy === "name_asc") {
+        result.sort((a, b) => a.x.localeCompare(b.x));
+      }
+
+      if (maxX > 0 && result.length > maxX) {
+        result = result.slice(0, maxX);
+      }
+
+      return {
+        chartData: result,
+        seriesKeys: Array.from(seriesSet),
+        has3D: true,
+      };
+    }
+
+    // 3. Multi-metric 3D: if multiple yKeys are provided
+    if (yKeys.length > 1) {
+      let result = filteredRows.map((item) => {
+        const entry: Record<string, any> = { x: item.x };
+        let total = 0;
+        for (const yk of yKeys) {
+          const val = item.raw[yk];
+          const num = typeof val === "number" ? val : parseFloat(String(val)) || 0;
+          entry[yk] = num;
+          total += num;
+        }
+        entry._total = total;
+        return entry;
+      });
+
+      if (sortBy === "val_desc") {
+        result.sort((a, b) => (b._total || 0) - (a._total || 0));
+      } else if (sortBy === "val_asc") {
+        result.sort((a, b) => (a._total || 0) - (b._total || 0));
+      } else if (sortBy === "name_asc") {
+        result.sort((a, b) => a.x.localeCompare(b.x));
+      }
+
+      if (maxX > 0 && result.length > maxX) {
+        result = result.slice(0, maxX);
+      }
+
+      return {
+        chartData: result,
+        seriesKeys: yKeys,
+        has3D: true,
+      };
+    }
+
+    // 4. Standard 2D single metric
+    let result = filteredRows.map((item) => ({
+      x: item.x,
+      [primaryYKey]: item.y,
+      y: item.y,
+      color: item.color,
+    }));
+
+    if (sortBy === "val_desc") {
+      result.sort((a, b) => b.y - a.y);
+    } else if (sortBy === "val_asc") {
+      result.sort((a, b) => a.y - b.y);
+    } else if (sortBy === "name_asc") {
+      result.sort((a, b) => a.x.localeCompare(b.x));
+    }
+
+    if (maxX > 0 && result.length > maxX) {
+      result = result.slice(0, maxX);
+    }
+
+    return {
+      chartData: result,
+      seriesKeys: [primaryYKey],
+      has3D: false,
+    };
+  }, [rawData, selectedCategories, searchQuery, minY, zKey, yKeys, primaryYKey, sortBy, maxX]);
 
   function downloadCsv() {
     let content = chart.data_source?.csv_data;
     if (!content) {
-      // Fallback CSV generation
       const cols = chart.columns || [];
       const keys = cols.length ? cols.map((c) => c.key) : Object.keys(rows[0] || {});
       const headers = cols.length ? cols.map((c) => c.label) : keys;
@@ -98,8 +349,11 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
       title: chart.title,
       description: chart.description,
       sql: chart.sql,
+      chart_type: activeType,
       x_axis: chart.x_label || chart.x_key,
       y_axis: chart.y_label || chart.y_keys.join(", "),
+      z_axis: zKey,
+      group_mode: groupMode,
       row_count: rows.length,
       columns: chart.columns,
       data: rows,
@@ -115,30 +369,37 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
     URL.revokeObjectURL(url);
   }
 
-  // Chart dimensions
-  const width = 720;
-  const height = 340;
-  const padLeft = 60;
-  const padRight = 30;
-  const padTop = 35;
-  const padBottom = 60;
-  const plotWidth = width - padLeft - padRight;
-  const plotHeight = height - padTop - padBottom;
-
-  // Y Axis ticks (4 intervals)
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
-    val: maxY * pct,
-    y: padTop + plotHeight - pct * plotHeight,
-  }));
+  // Custom Recharts Tooltip
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="recharts-custom-tooltip">
+          <p className="tooltip-title">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="tooltip-row">
+              <span className="tooltip-dot" style={{ background: entry.color || entry.fill }} />
+              <span className="tooltip-name">{entry.name}:</span>
+              <span className="tooltip-val">
+                {entry.value?.toLocaleString(intl)}{" "}
+                <small className="tooltip-k">({formatKValue(entry.value, intl)})</small>
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="graph-container">
-      {/* Header with Title, Chart Type Switcher, and Download Data Source */}
+      {/* Header with Title, Dimension Indicator, Chart Type Switcher, Filter Toggle, and Downloads */}
       <div className="graph-header">
         <div className="graph-title-group">
           <div className="graph-badge">
             <span className="dot" />
             <span className="graph-badge-text">
+              {has3D ? t.dimensionsCount(3) : t.dimensionsCount(2)} &bull;{" "}
               {activeType === "bar"
                 ? t.barChart
                 : activeType === "line"
@@ -206,7 +467,22 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
             </Button>
           </div>
 
-          {/* Prominent Download Data Source Button */}
+          {/* Filter Toggle Button with Badge */}
+          <Button
+            variant="ghost"
+            size="plain"
+            className={`graph-filter-btn ${isFiltersOpen ? "open" : ""} ${activeFiltersCount > 0 ? "has-filters" : ""}`}
+            onClick={() => setIsFiltersOpen((v) => !v)}
+            title={t.filters}
+          >
+            <Filter size={14} />
+            <span>{t.filters}</span>
+            {activeFiltersCount > 0 && (
+              <span className="filter-count-badge">{activeFiltersCount}</span>
+            )}
+          </Button>
+
+          {/* Download Data Source CSV */}
           <Button
             variant="ghost"
             size="plain"
@@ -239,268 +515,378 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
         </div>
       </div>
 
-      {/* Main SVG Visualization */}
-      <div className="graph-canvas-wrap">
-        {!data.length ? (
-          <div className="empty-graph-notice">{t.emptyGraph}</div>
-        ) : activeType === "pie" ? (
-          <PieChartView
-            data={data}
-            totalY={totalY}
-            hoveredIndex={hoveredIndex}
-            setHoveredIndex={setHoveredIndex}
-            intl={intl}
-          />
-        ) : (
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            className="graph-svg"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            <defs>
-              <linearGradient
-                id={`area-grad-${gradientId}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#20a7c9" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#20a7c9" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
+      {/* Expandable Filter Panel (Search, 3rd Dimension Breakdown, Grouping, Max X, Sort, Min Y) */}
+      {isFiltersOpen && (
+        <div className="graph-filter-panel">
+          <div className="filter-panel-header">
+            <span className="filter-status-text">
+              {t.showingItems(chartData.length, allCategories.length)}
+              {allCategories.length > 12 && maxX === 12 && (
+                <> &bull; <strong>{t.showingCapped(chartData.length, allCategories.length)}</strong></>
+              )}
+              {has3D && (
+                <> &bull; <span className="badge-3d-indicator">{t.thirdDimension}: {zKey || yKeys.join(", ")}</span></>
+              )}
+            </span>
+            {activeFiltersCount > 0 && (
+              <button type="button" className="reset-filters-btn" onClick={resetFilters}>
+                <RotateCcw size={12} />
+                <span>{t.resetFilters}</span>
+              </button>
+            )}
+          </div>
 
-            {/* Horizontal Grid lines */}
-            {yTicks.map((tick, i) => (
-              <g key={i}>
-                <line
-                  x1={padLeft}
-                  y1={tick.y}
-                  x2={width - padRight}
-                  y2={tick.y}
-                  className="graph-grid-line"
-                />
-                <text
-                  x={padLeft - 10}
-                  y={tick.y + 4}
-                  className="graph-tick-label"
-                  textAnchor="end"
+          {/* Filter Row: Search, Max Items on X (12 cap), 3rd Dimension selector, Grouping, Sort, Min Y */}
+          <div className="filter-row">
+            {/* Search items */}
+            <div className="filter-search-box">
+              <Search size={13} className="text-muted" />
+              <input
+                type="text"
+                placeholder={t.filterSearch}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* 3rd Dimension (Breakdown) Selector */}
+            {candidateZColumns.length > 0 && (
+              <div className="filter-group">
+                <label>{t.thirdDimension}:</label>
+                <select
+                  className="filter-select"
+                  value={zKey || ""}
+                  onChange={(e) => setZKey(e.target.value || null)}
                 >
-                  {tick.val >= 1000000
-                    ? `${(tick.val / 1000000).toFixed(1)}M`
-                    : tick.val >= 1000
-                      ? `${(tick.val / 1000).toFixed(1)}k`
-                      : tick.val.toLocaleString(intl)}
-                </text>
-              </g>
-            ))}
-
-            {/* Y Axis Label */}
-            {chart.y_label && (
-              <text
-                x={18}
-                y={padTop - 12}
-                className="graph-axis-title"
-                textAnchor="start"
-              >
-                {chart.y_label}
-              </text>
+                  <option value="">{t.noBreakdown}</option>
+                  {candidateZColumns.map((col) => (
+                    <option key={col.key} value={col.key}>
+                      {col.label || col.key}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
-            {/* BAR CHART */}
-            {activeType === "bar" && (
-              <g className="graph-bars">
-                {data.map((d, i) => {
-                  const barWidth = Math.max(
-                    8,
-                    Math.min(48, (plotWidth / data.length) * 0.65),
-                  );
-                  const stepX = plotWidth / data.length;
-                  const x = padLeft + i * stepX + (stepX - barWidth) / 2;
-                  const barHeight = (d.y / maxY) * plotHeight;
-                  const y = padTop + plotHeight - barHeight;
-                  const isHovered = hoveredIndex === i;
-                  const color = PALETTE[i % PALETTE.length];
-
-                  return (
-                    <g
-                      key={i}
-                      onMouseEnter={() => setHoveredIndex(i)}
-                      onMouseLeave={() => setHoveredIndex(null)}
-                      className="graph-bar-group"
-                    >
-                      <rect
-                        x={x}
-                        y={y}
-                        width={barWidth}
-                        height={Math.max(2, barHeight)}
-                        rx={3}
-                        ry={3}
-                        fill={color}
-                        opacity={isHovered ? 1 : 0.88}
-                        className="graph-bar-rect"
-                      />
-                      {/* Top value badge on hover */}
-                      {isHovered && (
-                        <text
-                          x={x + barWidth / 2}
-                          y={y - 6}
-                          className="graph-hover-val"
-                          textAnchor="middle"
-                        >
-                          {d.y.toLocaleString(intl)}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
-            )}
-
-            {/* LINE OR AREA CHART */}
-            {(activeType === "line" || activeType === "area") && (
-              <g className="graph-line-group">
-                {(() => {
-                  const stepX = plotWidth / Math.max(1, data.length - 1);
-                  const points = data.map((d, i) => {
-                    const x = padLeft + i * stepX;
-                    const y = padTop + plotHeight - (d.y / maxY) * plotHeight;
-                    return { x, y, d };
-                  });
-
-                  const linePath = points
-                    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-                    .join(" ");
-
-                  const areaPath = `${linePath} L ${padLeft + (data.length - 1) * stepX} ${padTop + plotHeight} L ${padLeft} ${padTop + plotHeight} Z`;
-
-                  return (
-                    <>
-                      {activeType === "area" && (
-                        <path
-                          d={areaPath}
-                          fill={`url(#area-grad-${gradientId})`}
-                          className="graph-area-fill"
-                        />
-                      )}
-                      <path
-                        d={linePath}
-                        fill="none"
-                        stroke="#20a7c9"
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="graph-line-stroke"
-                      />
-                      {points.map((p, i) => {
-                        const isHovered = hoveredIndex === i;
-                        return (
-                          <g
-                            key={i}
-                            onMouseEnter={() => setHoveredIndex(i)}
-                            onMouseLeave={() => setHoveredIndex(null)}
-                          >
-                            <circle
-                              cx={p.x}
-                              cy={p.y}
-                              r={isHovered ? 6 : 4}
-                              fill="#ffffff"
-                              stroke="#20a7c9"
-                              strokeWidth={isHovered ? 3 : 2}
-                              className="graph-dot"
-                            />
-                            {isHovered && (
-                              <text
-                                x={p.x}
-                                y={p.y - 10}
-                                className="graph-hover-val"
-                                textAnchor="middle"
-                              >
-                                {p.d.y.toLocaleString(intl)}
-                              </text>
-                            )}
-                          </g>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-              </g>
-            )}
-
-            {/* SCATTER PLOT */}
-            {activeType === "scatter" && (
-              <g className="graph-scatter-group">
-                {(() => {
-                  const stepX = plotWidth / Math.max(1, data.length - 1);
-                  return data.map((d, i) => {
-                    const x = padLeft + i * stepX;
-                    const y = padTop + plotHeight - (d.y / maxY) * plotHeight;
-                    const isHovered = hoveredIndex === i;
-                    const color = PALETTE[i % PALETTE.length];
-                    return (
-                      <g
-                        key={i}
-                        onMouseEnter={() => setHoveredIndex(i)}
-                        onMouseLeave={() => setHoveredIndex(null)}
-                      >
-                        <circle
-                          cx={x}
-                          cy={y}
-                          r={isHovered ? 8 : 5}
-                          fill={color}
-                          stroke="#ffffff"
-                          strokeWidth={2}
-                          className="graph-dot"
-                        />
-                        {isHovered && (
-                          <text
-                            x={x}
-                            y={y - 12}
-                            className="graph-hover-val"
-                            textAnchor="middle"
-                          >
-                            {d.y.toLocaleString(intl)}
-                          </text>
-                        )}
-                      </g>
-                    );
-                  });
-                })()}
-              </g>
-            )}
-
-            {/* X Axis Labels */}
-            <g className="graph-x-labels">
-              {data.map((d, i) => {
-                const stepX =
-                  activeType === "bar"
-                    ? plotWidth / data.length
-                    : plotWidth / Math.max(1, data.length - 1);
-                const x =
-                  activeType === "bar"
-                    ? padLeft + i * stepX + stepX / 2
-                    : padLeft + i * stepX;
-                const isHovered = hoveredIndex === i;
-
-                // Truncate label if too long
-                const label = d.x.length > 12 ? `${d.x.slice(0, 10)}…` : d.x;
-
-                return (
-                  <text
-                    key={i}
-                    x={x}
-                    y={height - padBottom + 20}
-                    className={`graph-x-label ${isHovered ? "active" : ""}`}
-                    textAnchor="middle"
+            {/* Grouping Mode for Multi-series (Grouped vs Stacked) */}
+            {has3D && (activeType === "bar" || activeType === "area") && (
+              <div className="filter-group">
+                <label>{t.groupMode}:</label>
+                <div className="chip-group">
+                  <button
+                    type="button"
+                    className={`chip-btn ${groupMode === "grouped" ? "active" : ""}`}
+                    onClick={() => setGroupMode("grouped")}
                   >
-                    <title>{d.x}</title>
-                    {label}
-                  </text>
+                    {t.grouped}
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn ${groupMode === "stacked" ? "active" : ""}`}
+                    onClick={() => setGroupMode("stacked")}
+                  >
+                    {t.stacked}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Max Elements on X Axis (Default 12 cap) */}
+            <div className="filter-group">
+              <label>{t.maxElements}:</label>
+              <div className="chip-group">
+                {[5, 8, 10, 12].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    className={`chip-btn ${maxX === num ? "active" : ""}`}
+                    onClick={() => setMaxX(num)}
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`chip-btn ${maxX >= allCategories.length ? "active" : ""}`}
+                  onClick={() => setMaxX(allCategories.length || 100)}
+                >
+                  {t.allElements}
+                </button>
+              </div>
+            </div>
+
+            {/* Sort Order */}
+            <div className="filter-group">
+              <label>{t.sortBy}:</label>
+              <select
+                className="filter-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+              >
+                <option value="default">{t.sortDefault}</option>
+                <option value="val_desc">{t.sortDesc}</option>
+                <option value="val_asc">{t.sortAsc}</option>
+                <option value="name_asc">{t.sortName}</option>
+              </select>
+            </div>
+
+            {/* Min Value (Y) Filter */}
+            {rawMaxY > 0 && (
+              <div className="filter-group">
+                <label>{t.minYThreshold}:</label>
+                <div className="filter-slider-wrap">
+                  <input
+                    type="range"
+                    min={0}
+                    max={rawMaxY * 0.9}
+                    step={rawMaxY / 50 || 1}
+                    value={minY}
+                    onChange={(e) => setMinY(Number(e.target.value))}
+                  />
+                  <span className="filter-slider-val">{formatKValue(minY, intl)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Category Toggle Pills */}
+          {allCategories.length > 1 && (
+            <div className="category-pills-row">
+              <button
+                type="button"
+                className="category-pill"
+                onClick={() => setSelectedCategories(new Set(allCategories))}
+              >
+                {t.allElements}
+              </button>
+              <button
+                type="button"
+                className="category-pill"
+                onClick={() => {
+                  if (allCategories.length > 0) setSelectedCategories(new Set([allCategories[0]]));
+                }}
+              >
+                {t.resetFilters}
+              </button>
+              {allCategories.map((cat, i) => {
+                const isSelected = selectedCategories.has(cat);
+                const color = PALETTE[i % PALETTE.length];
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`category-pill ${isSelected ? "selected" : ""}`}
+                    onClick={() => toggleCategory(cat)}
+                  >
+                    <span
+                      className="pill-color-indicator"
+                      style={{ background: isSelected ? color : "#94a3b8" }}
+                    />
+                    <span>{cat}</span>
+                    {isSelected && <Check size={11} />}
+                  </button>
                 );
               })}
-            </g>
-          </svg>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Recharts Visualization Canvas */}
+      <div className="graph-canvas-wrap" style={{ width: "100%", height: 360, minHeight: 340 }}>
+        {!mounted ? (
+          <div className="empty-graph-notice">Loading chart…</div>
+        ) : !chartData.length ? (
+          <div className="empty-graph-notice">{t.emptyGraph}</div>
+        ) : activeType === "bar" ? (
+          /* ================= BAR CHART ================= */
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsBarChart
+              data={chartData}
+              margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#edf1f6" vertical={false} />
+              <XAxis
+                dataKey="x"
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                interval={0}
+                tickFormatter={(val) => (String(val).length > 12 ? `${String(val).slice(0, 10)}…` : String(val))}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                tickFormatter={(val) => formatKValue(val, intl)}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              {has3D && <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />}
+              {seriesKeys.map((key, i) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  fill={PALETTE[i % PALETTE.length]}
+                  stackId={groupMode === "stacked" ? "stack" : undefined}
+                  radius={groupMode === "stacked" ? [0, 0, 0, 0] : [4, 4, 0, 0]}
+                  name={key}
+                >
+                  {!has3D &&
+                    chartData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                </Bar>
+              ))}
+            </RechartsBarChart>
+          </ResponsiveContainer>
+        ) : activeType === "line" ? (
+          /* ================= LINE CHART ================= */
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsLineChart
+              data={chartData}
+              margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#edf1f6" vertical={false} />
+              <XAxis
+                dataKey="x"
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                interval={0}
+                tickFormatter={(val) => (String(val).length > 12 ? `${String(val).slice(0, 10)}…` : String(val))}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                tickFormatter={(val) => formatKValue(val, intl)}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              {has3D && <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />}
+              {seriesKeys.map((key, i) => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={PALETTE[i % PALETTE.length]}
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: "#ffffff", stroke: PALETTE[i % PALETTE.length], strokeWidth: 2 }}
+                  activeDot={{ r: 6 }}
+                  name={key}
+                />
+              ))}
+            </RechartsLineChart>
+          </ResponsiveContainer>
+        ) : activeType === "area" ? (
+          /* ================= AREA CHART ================= */
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsAreaChart
+              data={chartData}
+              margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+            >
+              <defs>
+                {seriesKeys.map((key, i) => (
+                  <linearGradient key={key} id={`colorArea-${gradientId}-${i}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={PALETTE[i % PALETTE.length]} stopOpacity={0.65} />
+                    <stop offset="95%" stopColor={PALETTE[i % PALETTE.length]} stopOpacity={0.05} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#edf1f6" vertical={false} />
+              <XAxis
+                dataKey="x"
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                interval={0}
+                tickFormatter={(val) => (String(val).length > 12 ? `${String(val).slice(0, 10)}…` : String(val))}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                tickFormatter={(val) => formatKValue(val, intl)}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              {has3D && <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />}
+              {seriesKeys.map((key, i) => (
+                <Area
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={PALETTE[i % PALETTE.length]}
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill={`url(#colorArea-${gradientId}-${i})`}
+                  stackId={groupMode === "stacked" ? "stack" : undefined}
+                  name={key}
+                />
+              ))}
+            </RechartsAreaChart>
+          </ResponsiveContainer>
+        ) : activeType === "pie" ? (
+          /* ================= PIE / DONUT CHART ================= */
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsPieChart>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+              <Pie
+                data={chartData}
+                dataKey={seriesKeys[0]}
+                nameKey="x"
+                cx="50%"
+                cy="50%"
+                innerRadius={65}
+                outerRadius={115}
+                paddingAngle={2}
+                label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                ))}
+              </Pie>
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        ) : (
+          /* ================= SCATTER / 3D BUBBLE CHART ================= */
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsScatterChart
+              margin={{ top: 20, right: 30, left: 10, bottom: 40 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#edf1f6" />
+              <XAxis
+                dataKey="x"
+                name={chart.x_label || chart.x_key}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+              />
+              <YAxis
+                dataKey={seriesKeys[0]}
+                name={chart.y_label || seriesKeys[0]}
+                tick={{ fontSize: 10, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={{ stroke: "#cbd5e1" }}
+                tickFormatter={(val) => formatKValue(val, intl)}
+              />
+              {/* 3rd dimension scales bubble size */}
+              <ZAxis
+                dataKey="_bubbleZ"
+                range={[80, 500]}
+                name={zKey || "Size"}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Scatter
+                name={chart.title}
+                data={chartData}
+                fill="#20a7c9"
+              >
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                ))}
+              </Scatter>
+            </RechartsScatterChart>
+          </ResponsiveContainer>
         )}
       </div>
 
@@ -513,129 +899,19 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
           </span>
           <span className="pill-dot" />
           <span className="row-count">
-            {t.rowsCount(chart.data_source?.row_count || data.length)}
+            {t.rowsCount(chart.data_source?.row_count || rows.length)}
           </span>
-        </div>
-
-        {hoveredIndex !== null && data[hoveredIndex] && (
-          <div className="graph-live-tooltip">
-            <strong>{data[hoveredIndex].x}:</strong>{" "}
-            <span>{data[hoveredIndex].y.toLocaleString(intl)}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Pie / Donut Chart visualization */
-function PieChartView({
-  data,
-  totalY,
-  hoveredIndex,
-  setHoveredIndex,
-  intl,
-}: {
-  data: { index: number; x: string; y: number }[];
-  totalY: number;
-  hoveredIndex: number | null;
-  setHoveredIndex: (idx: number | null) => void;
-  intl: string;
-}) {
-  const size = 300;
-  const center = size / 2;
-  const radius = 110;
-  const innerRadius = 60; // Donut style
-
-  let accumulatedAngle = 0;
-  const slices = data.map((d, i) => {
-    const fraction = totalY > 0 ? d.y / totalY : 0;
-    const angle = fraction * 2 * Math.PI;
-    const startAngle = accumulatedAngle;
-    const endAngle = accumulatedAngle + angle;
-    accumulatedAngle += angle;
-
-    const x1 = center + radius * Math.cos(startAngle);
-    const y1 = center + radius * Math.sin(startAngle);
-    const x2 = center + radius * Math.cos(endAngle);
-    const y2 = center + radius * Math.sin(endAngle);
-
-    const ix1 = center + innerRadius * Math.cos(endAngle);
-    const iy1 = center + innerRadius * Math.sin(endAngle);
-    const ix2 = center + innerRadius * Math.cos(startAngle);
-    const iy2 = center + innerRadius * Math.sin(startAngle);
-
-    const largeArc = angle > Math.PI ? 1 : 0;
-    const path = `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix2} ${iy2} Z`;
-
-    return {
-      ...d,
-      path,
-      fraction,
-      percentage: Math.round(fraction * 100),
-      color: PALETTE[i % PALETTE.length],
-    };
-  });
-
-  return (
-    <div className="pie-chart-wrap">
-      <svg viewBox={`0 0 ${size} ${size}`} className="pie-svg">
-        {slices.map((slice, i) => {
-          const isHovered = hoveredIndex === i;
-          return (
-            <path
-              key={i}
-              d={slice.path}
-              fill={slice.color}
-              opacity={isHovered ? 1 : 0.88}
-              stroke="#ffffff"
-              strokeWidth={2}
-              className="pie-slice"
-              onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex(null)}
-            />
-          );
-        })}
-        {/* Center label */}
-        <text
-          x={center}
-          y={center - 4}
-          className="pie-center-title"
-          textAnchor="middle"
-        >
-          {hoveredIndex !== null ? slices[hoveredIndex]?.percentage + "%" : "Total"}
-        </text>
-        <text
-          x={center}
-          y={center + 14}
-          className="pie-center-val"
-          textAnchor="middle"
-        >
-          {hoveredIndex !== null
-            ? slices[hoveredIndex]?.x.slice(0, 10)
-            : totalY.toLocaleString(intl)}
-        </text>
-      </svg>
-
-      {/* Legend */}
-      <div className="pie-legend">
-        {slices.map((slice, i) => (
-          <div
-            key={i}
-            className={`pie-legend-item ${hoveredIndex === i ? "active" : ""}`}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
-          >
-            <span
-              className="legend-color-dot"
-              style={{ background: slice.color }}
-            />
-            <span className="legend-label" title={slice.x}>
-              {slice.x}
+          {chartData.length !== allCategories.length && (
+            <span className="badge-numeric" style={{ marginLeft: 6, fontSize: 10 }}>
+              {chartData.length} visible
             </span>
-            <span className="legend-pct">{slice.percentage}%</span>
-          </div>
-        ))}
+          )}
+          {has3D && (
+            <span className="badge-numeric" style={{ marginLeft: 6, fontSize: 10, background: "#e0f2fe", color: "#0369a1" }}>
+              3 Dimensions active
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

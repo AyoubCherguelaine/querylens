@@ -27,8 +27,15 @@ class Settings(BaseSettings):
     import_max_columns: int = Field(default=128, ge=1, le=256)
     import_timeout_ms: int = Field(default=60000, ge=1000, le=300000)
     max_imported_sources: int = Field(default=2, ge=1, le=500)
-    max_chat_sessions: int = Field(default=10, ge=1, le=1000)
-    max_questions_per_session: int = Field(default=3, ge=1, le=200)
+    max_chat_sessions: int | None = Field(default=None, ge=1, le=100000)
+    max_questions_per_session: int | None = Field(default=None, ge=1, le=100000)
+
+    @field_validator("max_chat_sessions", "max_questions_per_session", mode="before")
+    @classmethod
+    def empty_or_zero_quota(cls, value):
+        if value is None or value == "" or value == "0" or value == 0:
+            return None
+        return int(value)
 
     @field_validator("analytics_database_url", mode="before")
     @classmethod

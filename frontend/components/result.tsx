@@ -38,12 +38,16 @@ export function AnalysisResult({ result }: { result: Result }) {
     );
     const xCol = nonNumCols[0] || cols[0];
     const yCol = numCols.find((nc) => nc.key !== xCol.key) || numCols[0];
+    const zCol = nonNumCols[1] || null;
+    const isDate = /date|time|month|year|day|week/i.test(xCol.key);
     return {
       title: result.answer ? result.answer.slice(0, 60) : "Data Visualization",
-      chart_type: "bar",
+      chart_type: isDate ? "line" : "bar",
       description: "",
       x_key: xCol.key,
       y_keys: [yCol.key],
+      z_key: zCol ? zCol.key : null,
+      group_mode: "grouped",
       x_label: xCol.label,
       y_label: yCol.label,
       evidence_id: "direct",

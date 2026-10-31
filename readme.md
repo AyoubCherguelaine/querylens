@@ -38,7 +38,7 @@ Edit `.env`:
 - `ALLOW_SIGNUP`: disable public registration after provisioning accounts if needed.
 - `LOG_LEVEL`, `TOKEN_MINUTES`: logging and session lifetime.
 - `UPLOAD_MAX_BYTES`, `IMPORT_MAX_ROWS`, `IMPORT_MAX_TABLES`, `IMPORT_MAX_COLUMNS`, `IMPORT_TIMEOUT_MS`, `MAX_IMPORTED_SOURCES`: import limits (defaults: 25 MiB, 100,000 total rows, 50 tables, 128 columns per table, 60-second SQL timeout, 2 saved imports per account). Match `UPLOAD_MAX_BYTES` in the frontend environment; Compose passes it automatically.
-- `MAX_CHAT_SESSIONS`, `MAX_QUESTIONS_PER_SESSION`: chat quotas (defaults: 10 chats per account, 3 questions per chat).
+- `MAX_CHAT_SESSIONS`, `MAX_QUESTIONS_PER_SESSION`: optional chat quotas (defaults: unlimited, bounded only by user credits).
 
 URLs must use `postgresql://` or `postgres://`. Percent-encode special characters in credentials. `.env` is ignored by Git; never put server keys in `NEXT_PUBLIC_*` variables.
 
