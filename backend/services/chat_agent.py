@@ -273,9 +273,26 @@ def history_context(history):
     return result
 
 
-async def run_agent(pool, settings, cube, question, history, emit=None, *, selected_cubes=None):
+async def run_agent(
+    pool, settings, cube, question, history, emit=None, *, selected_cubes=None, model_settings=None
+):
     if not settings.openai_api_key.get_secret_value():
         raise PlannerUnavailable("Configure OPENAI_API_KEY to use the conversational agent.")
+    user_settings = model_settings or {}
+    model_name = user_settings.get("model") or settings.openai_model
+    max_steps = int(user_settings.get("max_steps") or settings.agent_max_steps)
+    process_mode = user_settings.get("process_mode") or "standard"
+    custom_instructions = user_settings.get("custom_instructions") or ""
+
+    agent_instructions = PROMPT
+    if process_mode == "deep_analytical":
+        agent_instructions += "\n\nMODE: Deep Analytical. Perform thorough validation, execute multiple queries if helpful, and produce both a detailed report and visual chart when appropriate."
+    elif process_mode == "fast":
+        agent_instructions += "\n\nMODE: Fast. Answer directly with minimal exploration steps."
+
+    if custom_instructions.strip():
+        agent_instructions += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions.strip()}"
+
     steps, last_query = [], {}
     failure = {"error": "Request cancelled before completion.", "code": "cancelled"}
     active_started = time.monotonic()
@@ -304,6 +321,7 @@ async def run_agent(pool, settings, cube, question, history, emit=None, *, selec
             "steps": steps,
             "duration_ms": round((time.monotonic() - started) * 1000),
             "executed_at": datetime.now(timezone.utc).isoformat(),
+            "model_used": model_name,
             "warnings": ["Source samples and query results are sent to the configured model."],
         }
 
@@ -336,7 +354,7 @@ async def run_agent(pool, settings, cube, question, history, emit=None, *, selec
             max_retries=1,
         ) as client:
             calls_used = 0
-            for turn in range(settings.agent_max_steps):
+            for turn in range(max_steps):
                 model_step = {
                     "id": f"model-{turn}",
                     "tool": "model",
@@ -347,8 +365,8 @@ async def run_agent(pool, settings, cube, question, history, emit=None, *, selec
                 await publish(model_step)
                 active_started = time.monotonic()
                 response = await client.responses.create(
-                    model=settings.openai_model,
-                    instructions=PROMPT,
+                    model=model_name,
+                    instructions=agent_instructions,
                     input=messages,
                     tools=tools,
                     parallel_tool_calls=False,

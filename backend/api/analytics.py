@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from backend.api.dependencies import cube_pool, current_user, owned_cube
+from backend.core.models_config import get_model_credit_cost
 from backend.schemas import Analysis, Question, SessionCreate, SessionTables
 from backend.services.analysis import execute_plan
 from backend.services.chat_agent import run_agent
 from backend.services.chat_scope import resolve_cubes, save_tables, table_ids
+from backend.services.credits import QUESTION_COST, check_and_deduct_credits
 from backend.services.planner import PlannerUnavailable
 from backend.services.sources import available_definitions, connect_existing
 
@@ -152,7 +154,19 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
         raise HTTPException(503, "Configure OPENAI_API_KEY to use the conversational agent.")
     limit = settings.max_questions_per_session
     limit_message = f"This chat has reached the {limit}-question limit. Start a new chat."
+
+    user_model = (user.get("model_settings") or {}).get("model") or settings.openai_model
+    question_cost = get_model_credit_cost(user_model, default_cost=QUESTION_COST)
+
     async with request.app.state.db.acquire() as connection:
+        user_credits = await connection.fetchval(
+            "SELECT credits FROM chat_olap.users WHERE id=$1", user["id"]
+        )
+        if user_credits is not None and user_credits < question_cost:
+            raise HTTPException(
+                402,
+                f"Insufficient credits. Asking a question with {user_model} requires {question_cost} credits, but your current balance is {user_credits}.",
+            )
         asked = await connection.fetchval(
             "SELECT count(*) FROM chat_olap.messages WHERE session_id=$1", session_id
         )
@@ -176,6 +190,7 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 previous,
                 emit,
                 selected_cubes=[c["definition"] for c in selected],
+                model_settings=user.get("model_settings"),
             )
         except PlannerUnavailable as error:
             raise HTTPException(503, str(error))
@@ -191,6 +206,12 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 )
                 if asked >= limit:
                     raise HTTPException(409, limit_message)
+                remaining_credits = await check_and_deduct_credits(
+                    connection, user["id"], question_cost, f"question:{user_model}:{body.question[:30]}"
+                )
+                result["credits_remaining"] = remaining_credits
+                result["credits_spent"] = question_cost
+                result["model_used"] = user_model
                 await connection.execute(
                     "INSERT INTO chat_olap.messages(id,session_id,question,result) VALUES($1,$2,$3,$4)",
                     uuid4(),

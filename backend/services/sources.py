@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from backend.services.catalog import discover
 from backend.services.compiler import quote
+from backend.services.credits import NEW_DATA_COST, check_and_deduct_credits
 from backend.services.import_parser import ImportInvalid, identifier
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,15 @@ async def connect_existing(request, user_id, schema_name):
         raise ImportInvalid("No accessible ordinary tables were found in this schema.")
     async with request.app.state.db.acquire() as connection:
         async with connection.transaction():
+            existing = await connection.fetchrow(
+                "SELECT id FROM chat_olap.sources WHERE owner_id=$1 AND schema_name=$2",
+                user_id,
+                schema_name,
+            )
+            if not existing:
+                await check_and_deduct_credits(
+                    connection, user_id, NEW_DATA_COST, f"connect_source:{schema_name}"
+                )
             source = await connection.fetchrow(
                 """INSERT INTO chat_olap.sources(id,owner_id,name,schema_name,kind)
                 VALUES($1,$2,$3,$3,'existing') ON CONFLICT(owner_id,schema_name)
@@ -107,6 +117,9 @@ async def import_dataset(
                 raise ImportInvalid(
                     f"This account has reached the {settings.max_imported_sources} imported-source limit."
                 )
+            await check_and_deduct_credits(
+                connection, user_id, NEW_DATA_COST, f"import_data:{parsed.schema_name}"
+            )
             schema, suffix = base, 1
             while schema in settings.analytics_schemas or await connection.fetchval(
                 "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1) OR EXISTS(SELECT 1 FROM chat_olap.sources WHERE schema_name=$1)",

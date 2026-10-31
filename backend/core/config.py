@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     token_minutes: int = Field(default=120, ge=5, le=1440)
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-mini"
+    models_config_path: str = "models.json"
     llm_timeout_seconds: int = Field(default=40, ge=1, le=120)
     agent_max_steps: int = Field(default=12, ge=1, le=40)
     agent_timeout_seconds: int = Field(default=180, ge=10, le=600)

@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 import jwt
@@ -25,11 +26,27 @@ async def current_user(
         raise HTTPException(401, "Authentication required", headers={"WWW-Authenticate": "Bearer"})
     async with request.app.state.db.acquire() as connection:
         user = await connection.fetchrow(
-            "SELECT id,email,full_name FROM chat_olap.users WHERE id=$1 AND is_active", user_id
+            "SELECT id,email,full_name,credits,model_settings FROM chat_olap.users WHERE id=$1 AND is_active", user_id
         )
     if not user:
         raise HTTPException(401, "Account unavailable")
-    return dict(user)
+    res = dict(user)
+    if isinstance(res.get("model_settings"), str):
+        try:
+            res["model_settings"] = json.loads(res["model_settings"])
+        except Exception:
+            res["model_settings"] = {}
+    elif res.get("model_settings") is None:
+        res["model_settings"] = {
+            "model": "gpt-4o-mini",
+            "process_mode": "standard",
+            "temperature": 0.1,
+            "max_steps": 12,
+            "custom_instructions": "",
+        }
+    if res.get("credits") is None:
+        res["credits"] = 100
+    return res
 
 
 async def owned_cube(request, cube_id, user_id):

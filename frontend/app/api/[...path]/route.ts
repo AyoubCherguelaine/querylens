@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 const routes =
-  /^(users\/(login|signup|me)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/(messages|tables))?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|health\/ready)$/;
+  /^(users\/(login|signup|me|settings|models|credits(\/recharge)?)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/(messages|tables))?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|health\/ready)$/;
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
@@ -89,7 +89,15 @@ async function proxy(
         },
       });
     }
-    const data = await upstream.json();
+    let data: any = {};
+    const text = await upstream.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text };
+      }
+    }
     if (path === "users/login" && upstream.ok) {
       jar.set("olap_session", data.access_token, {
         httpOnly: true,
@@ -119,3 +127,6 @@ async function proxy(
 }
 export const GET = proxy;
 export const POST = proxy;
+export const PATCH = proxy;
+export const PUT = proxy;
+export const DELETE = proxy;

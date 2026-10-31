@@ -114,11 +114,16 @@ export function SchemaSidebar({
       </div>
       <div className="schema-table-list">
         {sourceCubes
-          .filter((item) =>
-            `${item.definition.name} ${item.definition.table}`
+          .filter((item) => {
+            const q = schemaSearch.toLowerCase();
+            const matchTable = `${item.definition.name} ${item.definition.table}`
               .toLowerCase()
-              .includes(schemaSearch.toLowerCase()),
-          )
+              .includes(q);
+            const matchField = item.definition.fields.some((f) =>
+              f.name.toLowerCase().includes(q),
+            );
+            return matchTable || matchField;
+          })
           .map((item) => (
             <Button
               variant="ghost"
@@ -132,7 +137,9 @@ export function SchemaSidebar({
               <Table2 size={16} />
               <span>
                 {item.definition.name}
-                <small>{item.definition.table}</small>
+                <small>
+                  {item.definition.table} · {item.definition.fields.length} cols
+                </small>
               </span>
               <ChevronRight size={14} />
             </Button>
@@ -143,11 +150,15 @@ export function SchemaSidebar({
           </p>
         )}
         {!!sourceCubes.length &&
-          !sourceCubes.some((item) =>
-            `${item.definition.name} ${item.definition.table}`
-              .toLowerCase()
-              .includes(schemaSearch.toLowerCase()),
-          ) && <p className="sidebar-hint">{t.noMatch}</p>}
+          !sourceCubes.some((item) => {
+            const q = schemaSearch.toLowerCase();
+            return (
+              `${item.definition.name} ${item.definition.table}`
+                .toLowerCase()
+                .includes(q) ||
+              item.definition.fields.some((f) => f.name.toLowerCase().includes(q))
+            );
+          }) && <p className="sidebar-hint">{t.noMatch}</p>}
       </div>
       {cube && (
         <div className="schema-details">

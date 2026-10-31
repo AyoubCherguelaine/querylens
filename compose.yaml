@@ -37,6 +37,8 @@ services:
     environment:
       DATABASE_URL: postgresql://chat_olap:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/chat_olap
       ANALYTICS_DATABASE_URL: ${DOCKER_ANALYTICS_DATABASE_URL:-}
+    volumes:
+      - ./models.json:/app/models.json:ro
     ports:
       - "127.0.0.1:8001:8001"
     restart: unless-stopped

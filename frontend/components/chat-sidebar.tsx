@@ -10,6 +10,7 @@ import {
   History,
   MessageSquare,
   LogOut,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import type { Cube, Session, Source } from "@/lib/api";
 import { LanguageSwitch, useT } from "@/lib/i18n/client";
@@ -26,6 +27,7 @@ export function ChatSidebar({
   onNewChat,
   onOpenSession,
   onSignOut,
+  onOpenSettings,
 }: {
   leftOpen: boolean;
   rightOpen: boolean;
@@ -38,6 +40,7 @@ export function ChatSidebar({
   onNewChat: () => void;
   onOpenSession: (session: Session) => void;
   onSignOut: () => void;
+  onOpenSettings?: () => void;
 }) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.chats;
@@ -132,12 +135,13 @@ export function ChatSidebar({
           >
             <MessageSquare size={16} />
             <span className="session-cell">
-              <span
+              <bdi
                 className="session-name"
                 title={sessionName(item)}
+                dir="auto"
               >
                 {sessionName(item)}
-              </span>
+              </bdi>
               <time className="session-date" dateTime={item.created_at}>
                 {formatDate(item.created_at)}
               </time>
@@ -156,24 +160,44 @@ export function ChatSidebar({
         )}
       </div>
       <div className="sidebar-bottom">
-        <span className="source-info">
-          <span className="dot" />
-          <span className="source-name">
-            {activeSource?.schema_name || t.source}
+        <div className="sidebar-source-row">
+          <span className="source-info">
+            <span className="dot" />
+            <span className="source-name" title={activeSource?.schema_name || t.source}>
+              {activeSource?.schema_name || t.source}
+            </span>
           </span>
           {!!sourceKind && <span className="source-kind">{sourceKind}</span>}
-        </span>
-        <LanguageSwitch />
-        <Button
-          variant="ghost"
-          size="plain"
-          className="icon-button"
-          aria-label={t.signOut}
-          disabled={busy}
-          onClick={onSignOut}
-        >
-          <LogOut size={17} />
-        </Button>
+        </div>
+        <div className="sidebar-actions-row">
+          <LanguageSwitch />
+          <div className="sidebar-action-buttons">
+            {onOpenSettings && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="icon-button"
+                aria-label="Settings"
+                title="Settings"
+                disabled={busy}
+                onClick={onOpenSettings}
+              >
+                <SettingsIcon size={17} />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="plain"
+              className="icon-button"
+              aria-label={t.signOut}
+              title={t.signOut}
+              disabled={busy}
+              onClick={onSignOut}
+            >
+              <LogOut size={17} />
+            </Button>
+          </div>
+        </div>
       </div>
     </aside>
   );

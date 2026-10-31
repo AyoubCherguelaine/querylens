@@ -15,6 +15,12 @@ import {
   RefreshCw,
   Sparkles,
   Table2,
+  LayoutDashboard,
+  Coins,
+  Cpu,
+  Settings as SettingsIcon,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import {
   api,
@@ -26,12 +32,17 @@ import {
   type Session,
   type Source,
   type SourceOverview,
+  type UserInfo,
+  getModelCreditCost,
 } from "@/lib/api";
 import { ChatTables } from "./chat-tables";
 import { ChatSidebar } from "./chat-sidebar";
 import { SchemaSidebar } from "./schema-sidebar";
 import { ImportData } from "./import-data";
 import { SourceDashboard } from "./source-dashboard";
+import { OverviewDashboard } from "./overview-dashboard";
+import { SchemaVisualizer } from "./schema-visualizer";
+import { SettingsDialog } from "./settings-dialog";
 import { useRouter } from "next/navigation";
 import { ChatThread } from "./ai-elements/chat-thread";
 import {
@@ -47,6 +58,7 @@ export function Workspace() {
   const { t: dictionary, intl } = useT();
   const t = dictionary.workspace;
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
+    [user, setUser] = useState<UserInfo | undefined>(),
     [cubes, setCubes] = useState<Cube[]>([]),
     [selected, setSelected] = useState(""),
     [session, setSession] = useState(""),
@@ -56,9 +68,17 @@ export function Workspace() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [tab, setTab] = useState<"analysis" | "schema">("analysis");
-  const [view, setView] = useState<"dashboard" | "analysis" | "upload">(
-    "analysis",
-  );
+  const [view, setView] = useState<
+    "overview" | "analysis" | "schemas" | "dashboard" | "upload"
+  >("overview");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"model" | "credits">("model");
+  const [insufficientCredits, setInsufficientCredits] = useState<{
+    open: boolean;
+    needed: number;
+    balance: number;
+    model?: string;
+  } | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [leftOpen, setLeftOpen] = useState(false);
@@ -151,11 +171,15 @@ export function Workspace() {
   }
   async function sourceComplete(source: Source) {
     const latest = await load();
+    setUser((prev) =>
+      prev ? { ...prev, credits: Math.max(0, prev.credits - 10) } : prev,
+    );
     openSource(source.id, latest.cubes);
   }
   useEffect(() => {
-    api("users/me")
-      .then(() => {
+    api<UserInfo>("users/me")
+      .then((userData) => {
+        setUser(userData);
         setAuthenticated(true);
         void load().catch((error) => setError((error as Error).message));
       })
@@ -301,6 +325,18 @@ export function Workspace() {
   async function ask(event: React.FormEvent) {
     event.preventDefault();
     if (busy || !question.trim() || !cube) return;
+    const currentModel = user?.model_settings?.model || "gpt-4o-mini";
+    const neededCredits = getModelCreditCost(currentModel);
+    const userCredits = user?.credits ?? 100;
+    if (userCredits < neededCredits) {
+      setInsufficientCredits({
+        open: true,
+        needed: neededCredits,
+        balance: userCredits,
+        model: currentModel,
+      });
+      return;
+    }
     setBusy(true);
     setAgentSteps([]);
     setError("");
@@ -326,6 +362,16 @@ export function Workspace() {
         });
       });
       appendMessage(text, result);
+      if (result.credits_remaining !== undefined) {
+        setUser((prev) =>
+          prev ? { ...prev, credits: result.credits_remaining! } : prev,
+        );
+      } else {
+        const spent = result.credits_spent ?? neededCredits;
+        setUser((prev) =>
+          prev ? { ...prev, credits: Math.max(0, prev.credits - spent) } : prev,
+        );
+      }
       setAgentSteps([]);
       // Refreshing the sidebar must not turn a delivered answer into a chat error.
       void api<Session[]>("chat/sessions")
@@ -442,6 +488,10 @@ export function Workspace() {
         onNewChat={() => choose(selected)}
         onOpenSession={openSession}
         onSignOut={signOut}
+        onOpenSettings={() => {
+          setSettingsTab("model");
+          setSettingsOpen(true);
+        }}
       />
       <main className="main-panel" inert={leftOpen || rightOpen}>
         <header className="topbar">
@@ -464,14 +514,32 @@ export function Workspace() {
               {t.crumb} <ChevronRight size={14} />
             </span>
             <strong>
-              {view === "dashboard"
+              {view === "overview"
+                ? t.overviewNav
+                : view === "schemas"
+                ? t.schemasNav
+                : view === "dashboard"
                 ? t.sourcesTitle
                 : view === "upload"
-                  ? t.uploadTitle
-                  : t.analysisTitle}
+                ? t.uploadTitle
+                : t.analysisTitle}
             </strong>
           </div>
           <nav className="workspace-nav" aria-label={t.nav}>
+            <Button
+              variant="ghost"
+              size="plain"
+              className={view === "overview" ? "active" : ""}
+              aria-current={view === "overview" ? "page" : undefined}
+              disabled={busy}
+              onClick={() => {
+                setView("overview");
+                setError("");
+              }}
+            >
+              <LayoutDashboard size={15} />
+              <span>{t.overviewNav}</span>
+            </Button>
             <Button
               variant="ghost"
               size="plain"
@@ -485,6 +553,20 @@ export function Workspace() {
             >
               <Sparkles size={15} />
               <span>{t.chat}</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="plain"
+              className={view === "schemas" ? "active" : ""}
+              aria-current={view === "schemas" ? "page" : undefined}
+              disabled={busy}
+              onClick={() => {
+                setView("schemas");
+                setError("");
+              }}
+            >
+              <Layers3 size={15} />
+              <span>{t.schemasNav}</span>
             </Button>
             <Button
               variant="ghost"
@@ -515,21 +597,74 @@ export function Workspace() {
               <span>{t.upload}</span>
             </Button>
           </nav>
-          <Button
-            variant="ghost"
-            size="plain"
-            className="schema-toggle secondary"
-            aria-label={t.openSchemas}
-            aria-expanded={rightOpen}
-            aria-controls="schema-sidebar"
-            onClick={() => {
-              setRightOpen(!rightOpen);
-              setLeftOpen(false);
-            }}
-          >
-            <Database size={16} />
-            <span>{t.schemas}</span>
-          </Button>
+
+          <div className="topbar-controls">
+            <Button
+              variant="ghost"
+              size="plain"
+              className={`credits-pill-topbar ${
+                (user?.credits ?? 100) < 15 ? "low-credits" : ""
+              }`}
+              onClick={() => {
+                setSettingsTab("credits");
+                setSettingsOpen(true);
+              }}
+              title={dictionary.overview.creditRates}
+            >
+              <Coins size={14} className="coins-icon" />
+              <span>{t.creditsPill(user?.credits ?? 100)}</span>
+            </Button>
+
+            {(() => {
+              const activeModel = user?.model_settings?.model || "gpt-4o-mini";
+              const cost = getModelCreditCost(activeModel);
+              return (
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  className="model-pill-topbar"
+                  onClick={() => {
+                    setSettingsTab("model");
+                    setSettingsOpen(true);
+                  }}
+                  title={`OpenAI ${activeModel} (${cost} credits / question)`}
+                >
+                  <Cpu size={14} />
+                  <span>{activeModel}</span>
+                  <span className="model-pill-cost">{cost}c</span>
+                </Button>
+              );
+            })()}
+
+            <Button
+              variant="ghost"
+              size="plain"
+              className="icon-button settings-toggle"
+              aria-label={t.settingsButton}
+              onClick={() => {
+                setSettingsTab("model");
+                setSettingsOpen(true);
+              }}
+            >
+              <SettingsIcon size={16} />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="plain"
+              className="schema-toggle secondary"
+              aria-label={t.openSchemas}
+              aria-expanded={rightOpen}
+              aria-controls="schema-sidebar"
+              onClick={() => {
+                setRightOpen(!rightOpen);
+                setLeftOpen(false);
+              }}
+            >
+              <Database size={16} />
+              <span>{t.schemas}</span>
+            </Button>
+          </div>
         </header>
         <div
           className={`page-content ${view === "analysis" ? "analysis-content" : ""}`}
@@ -540,6 +675,45 @@ export function Workspace() {
               <h2>{t.preparing}</h2>
               <p>{t.loading}</p>
             </div>
+          ) : view === "overview" ? (
+            <OverviewDashboard
+              user={user}
+              overview={overview}
+              cubes={cubes}
+              sessions={sessions}
+              onOpenSource={openSource}
+              onOpenSession={openSession}
+              onStartAnalysis={() => {
+                setView("analysis");
+                setTab("analysis");
+              }}
+              onOpenSchemas={() => setView("schemas")}
+              onOpenUpload={() => setView("upload")}
+              onOpenSettings={(targetTab) => {
+                setSettingsTab(targetTab || "model");
+                setSettingsOpen(true);
+              }}
+              onAskPrompt={(prompt) => {
+                setQuestion(prompt);
+                setView("analysis");
+                setTab("analysis");
+              }}
+            />
+          ) : view === "schemas" ? (
+            <SchemaVisualizer
+              overview={overview}
+              cubes={cubes}
+              selectedCubeId={selected}
+              selectedSourceId={selectedSource}
+              onSelectTable={(id) => setSelected(id)}
+              onSelectSource={openSource}
+              onAskAboutTable={(c) => {
+                setSelected(c.id);
+                setView("analysis");
+                setTab("analysis");
+              }}
+              onProfileTable={profile}
+            />
           ) : view === "upload" ? (
             <ImportData
               limits={overview.limits}
@@ -969,6 +1143,65 @@ export function Workspace() {
         }}
         onUpload={() => setView("upload")}
       />
+      <SettingsDialog
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        user={user}
+        onUserUpdate={(updated) => {
+          setUser((prev) => (prev ? { ...prev, ...updated } : prev));
+        }}
+      />
+      {insufficientCredits?.open && (
+        <div
+          className="insufficient-credits-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="insufficient-credits-title"
+        >
+          <div className="insufficient-credits-dialog">
+            <div className="insufficient-header">
+              <div className="alert-icon-box">
+                <AlertCircle size={26} />
+              </div>
+              <div className="insufficient-text">
+                <h3 id="insufficient-credits-title">
+                  {t.insufficientCreditsTitle}
+                </h3>
+                <p>
+                  {t.insufficientCreditsMsg(
+                    insufficientCredits.needed,
+                    insufficientCredits.balance,
+                    insufficientCredits.model,
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="insufficient-actions">
+              <Button
+                variant="ghost"
+                size="plain"
+                className="secondary"
+                onClick={() => setInsufficientCredits(null)}
+              >
+                {dictionary.settings.close}
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className="primary"
+                onClick={() => {
+                  setInsufficientCredits(null);
+                  setSettingsTab("credits");
+                  setSettingsOpen(true);
+                }}
+              >
+                <Coins size={15} />
+                {dictionary.overview.manageCredits}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

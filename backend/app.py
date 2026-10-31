@@ -33,7 +33,7 @@ def create_app(settings=None):
                     version = await connection.fetchval(
                         "SELECT max(version) FROM chat_olap.schema_migrations"
                     )
-                    if version != 3:
+                    if version is None or version < 4:
                         raise RuntimeError("Apply database migrations before starting the API")
                 logger.info("service.started")
                 yield

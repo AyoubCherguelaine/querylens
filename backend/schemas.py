@@ -61,3 +61,16 @@ class Question(StrictModel):
 
 class Analysis(StrictModel):
     plan: Plan
+
+
+class ModelSettings(StrictModel):
+    model: str = Field(default="gpt-4o-mini", max_length=100)
+    process_mode: Literal["standard", "fast", "deep_analytical"] = "standard"
+    temperature: float = Field(default=0.1, ge=0.0, le=1.0)
+    max_steps: int = Field(default=12, ge=4, le=30)
+    custom_instructions: str = Field(default="", max_length=2000)
+
+
+class CreditRecharge(StrictModel):
+    amount: int = Field(default=50, ge=5, le=1000)
+

@@ -93,6 +93,216 @@ export type ChartSpec = {
   columns: { key: string; label: string }[];
   data_source: ChartSource;
 };
+export type ModelPricing = {
+  input_per_million: number;
+  output_per_million: number;
+  cached_input_per_million?: number;
+};
+
+export type ModelItem = {
+  id: string;
+  provider: "openai";
+  name: string;
+  description: string;
+  credit_cost: number;
+  pricing?: ModelPricing;
+  is_default: boolean;
+};
+
+export type ModelsConfig = {
+  provider: "openai";
+  description: string;
+  models: ModelItem[];
+};
+
+export const DEFAULT_OPENAI_MODELS: ModelItem[] = [
+  {
+    id: "gpt-4o-mini",
+    provider: "openai",
+    name: "OpenAI GPT-4o-mini",
+    description: "Fast and economical model for everyday analytics",
+    credit_cost: 5,
+    pricing: {
+      input_per_million: 0.15,
+      output_per_million: 0.6,
+      cached_input_per_million: 0.075,
+    },
+    is_default: true,
+  },
+  {
+    id: "gpt-6-luna",
+    provider: "openai",
+    name: "OpenAI GPT-6 Luna",
+    description: "Ultra-compact next-generation model for high-speed, cost-effective reasoning",
+    credit_cost: 4,
+    pricing: {
+      input_per_million: 0.1,
+      output_per_million: 0.5,
+      cached_input_per_million: 0.01,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-5.6-luna",
+    provider: "openai",
+    name: "OpenAI GPT-5.6 Luna",
+    description: "GPT-5.6 model optimized for cost-sensitive workloads",
+    credit_cost: 8,
+    pricing: {
+      input_per_million: 0.2,
+      output_per_million: 1.2,
+      cached_input_per_million: 0.02,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-5.4-nano",
+    provider: "openai",
+    name: "OpenAI GPT-5.4 Nano",
+    description: "Our fastest and cheapest GPT-5.4-class model for simple high-volume tasks",
+    credit_cost: 8,
+    pricing: {
+      input_per_million: 0.2,
+      output_per_million: 1.25,
+      cached_input_per_million: 0.02,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-5-nano",
+    provider: "openai",
+    name: "OpenAI GPT-5 Nano",
+    description: "Fastest, most cost-effective GPT-5 model",
+    credit_cost: 2,
+    pricing: {
+      input_per_million: 0.05,
+      output_per_million: 0.4,
+      cached_input_per_million: 0.005,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-4.1-nano",
+    provider: "openai",
+    name: "OpenAI GPT-4.1 Nano",
+    description: "Fastest, most cost-effective GPT-4.1 model",
+    credit_cost: 3,
+    pricing: {
+      input_per_million: 0.1,
+      output_per_million: 0.4,
+      cached_input_per_million: 0.025,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-4.1-mini",
+    provider: "openai",
+    name: "OpenAI GPT-4.1 Mini",
+    description: "Balanced for intelligence, speed, and cost",
+    credit_cost: 10,
+    pricing: {
+      input_per_million: 0.4,
+      output_per_million: 1.6,
+      cached_input_per_million: 0.1,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-4o",
+    provider: "openai",
+    name: "OpenAI GPT-4o",
+    description: "Advanced multi-step reasoning and deep analytical queries",
+    credit_cost: 15,
+    pricing: {
+      input_per_million: 2.5,
+      output_per_million: 10.0,
+      cached_input_per_million: 1.25,
+    },
+    is_default: false,
+  },
+  {
+    id: "gpt-4-turbo",
+    provider: "openai",
+    name: "OpenAI GPT-4 Turbo",
+    description: "High context capacity with comprehensive SQL verification",
+    credit_cost: 20,
+    pricing: {
+      input_per_million: 10.0,
+      output_per_million: 30.0,
+    },
+    is_default: false,
+  },
+  {
+    id: "o1-mini",
+    provider: "openai",
+    name: "OpenAI o1-mini",
+    description: "Deep mathematical reasoning and complex schema logic",
+    credit_cost: 25,
+    pricing: {
+      input_per_million: 1.1,
+      output_per_million: 4.4,
+      cached_input_per_million: 0.55,
+    },
+    is_default: false,
+  },
+  {
+    id: "o3-mini",
+    provider: "openai",
+    name: "OpenAI o3-mini",
+    description: "Next-generation high-precision STEM analytical reasoning",
+    credit_cost: 30,
+    pricing: {
+      input_per_million: 1.1,
+      output_per_million: 4.4,
+      cached_input_per_million: 0.55,
+    },
+    is_default: false,
+  },
+];
+
+export function getModelCreditCost(
+  modelId?: string,
+  availableModels?: ModelItem[],
+): number {
+  const models =
+    availableModels && availableModels.length > 0
+      ? availableModels
+      : DEFAULT_OPENAI_MODELS;
+  const match = models.find((m) => m.id === modelId);
+  return match ? match.credit_cost : 5;
+}
+
+export type ModelSettings = {
+  model: string;
+  process_mode: "standard" | "fast" | "deep_analytical";
+  temperature: number;
+  max_steps: number;
+  custom_instructions: string;
+};
+
+export type CreditTransaction = {
+  id: string;
+  amount: number;
+  action: string;
+  balance_after: number;
+  created_at: string;
+};
+
+export type CreditSummary = {
+  credits: number;
+  question_cost: number;
+  new_data_cost: number;
+  transactions: CreditTransaction[];
+};
+
+export type UserInfo = {
+  id: string;
+  email: string;
+  full_name: string;
+  credits: number;
+  model_settings: ModelSettings;
+};
+
 export type Result = {
   status: "answered" | "clarification" | "error" | "limit_reached";
   steps?: AgentStep[];
@@ -113,6 +323,9 @@ export type Result = {
   executed_at?: string;
   warnings?: string[];
   plan?: unknown;
+  credits_remaining?: number;
+  credits_spent?: number;
+  model_used?: string;
 };
 export type Message = { id: string; question: string; result: Result };
 export type Session = {
@@ -164,13 +377,25 @@ export async function askAgent(
     reader.releaseLock();
   }
 }
-export async function api<T>(path: string, body?: unknown): Promise<T> {
+export async function api<T>(
+  path: string,
+  body?: unknown,
+  method?: string,
+): Promise<T> {
   const response = await fetch(`/api/${path}`, {
-    method: body === undefined ? "GET" : "POST",
+    method: method || (body === undefined ? "GET" : "POST"),
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = await response.json();
+  const text = await response.text();
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { detail: text };
+    }
+  }
   if (!response.ok)
     throw new Error(
       typeof data.detail === "string" ? data.detail : errors().invalid,
