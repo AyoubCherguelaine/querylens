@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.api import analytics, auth, sources
+from backend.api import analytics, auth, evaluation, sources
 from backend.core.config import get_settings
 from backend.core.logging import configure_logging
 from backend.core.uploads import UploadBodyLimit
@@ -89,4 +89,5 @@ def create_app(settings=None):
     app.include_router(sources.router)
     app.include_router(auth.router)
     app.include_router(analytics.router)
+    app.include_router(evaluation.router)
     return app

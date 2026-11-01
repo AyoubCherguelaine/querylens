@@ -282,8 +282,9 @@ async def test_dynamic_model_credits_deduction():
 
 
 def test_settings_quotas_default_unlimited():
-    from backend.core.config import Settings
     from pydantic import SecretStr
+
+    from backend.core.config import Settings
 
     s = Settings(
         database_url=SecretStr("postgresql://u:p@localhost/db"),

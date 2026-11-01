@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""CLI entrypoint for running the QueryLens Agent Evaluation Framework."""
+
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from backend.evaluation.cli import main
+
+if __name__ == "__main__":
+    main()
