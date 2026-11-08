@@ -9,9 +9,9 @@ from fastapi.responses import StreamingResponse
 
 from backend.api.dependencies import cube_pool, current_user, owned_cube
 from backend.core.models_config import get_model_credit_cost
-from backend.schemas import Analysis, Question, SessionCreate, SessionTables
+from backend.schemas import Analysis, Question, SessionCreate, SessionTables, TableSuggest
 from backend.services.analysis import execute_plan
-from backend.services.chat_agent import run_agent
+from backend.services.chat_agent import run_agent, suggest_tables
 from backend.services.chat_scope import resolve_cubes, save_tables, table_ids
 from backend.services.credits import QUESTION_COST, check_and_deduct_credits
 from backend.services.planner import PlannerUnavailable
@@ -36,6 +36,34 @@ async def discover_cubes(request: Request, user=Depends(current_user)):
     for schema in sorted({d["schema"] for d in definitions}):
         await connect_existing(request, user["id"], schema)
     return {"discovered": len(definitions)}
+
+
+@router.post("/cubes/suggest-tables")
+async def suggest_tables_for_question(
+    body: TableSuggest, request: Request, user=Depends(current_user)
+):
+    """Given a natural-language question and a source_id, return the most relevant cube IDs."""
+    settings = request.app.state.settings
+    async with request.app.state.db.acquire() as connection:
+        rows = await connection.fetch(
+            "SELECT id,definition FROM chat_olap.cubes WHERE source_id=$1 AND owner_id=$2 ORDER BY source_table",
+            body.source_id,
+            user["id"],
+        )
+    if not rows:
+        raise HTTPException(404, "No tables found for this source.")
+    cubes_data = [{"id": str(row["id"]), **row["definition"]} for row in rows]
+    suggestion = await suggest_tables(body.question, cubes_data, settings)
+    # Map table refs back to cube IDs
+    ref_to_id = {f"{c['schema']}.{c['table']}": c["id"] for c in cubes_data}
+    suggested_ids = [ref_to_id[ref] for ref in suggestion["table_refs"] if ref in ref_to_id]
+    # Fallback: if no matches, return all cube IDs
+    if not suggested_ids:
+        suggested_ids = [c["id"] for c in cubes_data[:5]]
+    return {
+        "cube_ids": suggested_ids,
+        "reasoning": suggestion.get("reasoning", ""),
+    }
 
 
 @router.post("/cubes/{cube_id}/analyze")
@@ -188,6 +216,14 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
 
     async def execute(emit=None):
         try:
+            # Grant agent full awareness of all tables in this source profile without requiring manual user selection
+            async with request.app.state.db.acquire() as connection:
+                source_cubes = await connection.fetch(
+                    "SELECT id,source_id,definition FROM chat_olap.cubes WHERE source_id=$1 AND owner_id=$2 ORDER BY source_table",
+                    cube["source_id"],
+                    user["id"],
+                )
+            all_source_cubes = [dict(c) for c in source_cubes] if source_cubes else selected
             result = await run_agent(
                 cube_pool(request, cube),
                 settings,
@@ -195,12 +231,12 @@ async def ask(session_id: UUID, body: Question, request: Request, user=Depends(c
                 body.question,
                 previous,
                 emit,
-                selected_cubes=[c["definition"] for c in selected],
+                selected_cubes=[c["definition"] for c in all_source_cubes],
                 model_settings=user.get("model_settings"),
             )
         except PlannerUnavailable as error:
             raise HTTPException(503, str(error))
-        result["cube_ids"] = [str(c["id"]) for c in selected]
+        result["cube_ids"] = [str(c["id"]) for c in all_source_cubes]
         async with request.app.state.db.acquire() as connection:
             async with connection.transaction():
                 # Re-check under a session lock: concurrent questions may have landed meanwhile.

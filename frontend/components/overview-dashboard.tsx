@@ -22,12 +22,44 @@ import type { Cube, Session, Source, SourceOverview, UserInfo } from "@/lib/api"
 import { getModelCreditCost } from "@/lib/api";
 import { useT } from "@/lib/i18n/client";
 
+export function formatModelName(modelId?: string): string {
+  if (!modelId) return "GPT-4o Mini";
+  const id = modelId.toLowerCase().trim();
+  if (id.includes("gpt-oss-120b")) return "Bedrock GPT-OSS 120B";
+  if (id.includes("gpt-4o-mini")) return "GPT-4o Mini";
+  if (id.includes("gpt-4o")) return "GPT-4o";
+  if (id.includes("gpt-4.1-mini")) return "GPT-4.1 Mini";
+  if (id.includes("gpt-4.1")) return "GPT-4.1";
+  if (id.includes("claude-3-5-sonnet") || id.includes("claude-3.5-sonnet")) return "Claude 3.5 Sonnet";
+  if (id.includes("claude-3-haiku")) return "Claude 3 Haiku";
+  if (id.includes("gemini-1.5-pro")) return "Gemini 1.5 Pro";
+  if (id.includes("gemini-1.5-flash")) return "Gemini 1.5 Flash";
+
+  const clean = modelId.replace(/^[^./\\]+[./\\]/, "");
+  return clean.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function formatSourceName(source: Source): string {
+  const name = source.name || source.schema_name || "Dataset";
+  const match = name.match(/dataset_?(\d{4})(\d{2})(\d{2})/i);
+  if (match) {
+    const [, y, m, d] = match;
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!isNaN(date.getTime())) {
+      const monthStr = date.toLocaleDateString("en", { month: "short" });
+      return `Dataset (${monthStr} ${d}, ${y})`;
+    }
+  }
+  return name;
+}
+
 export function OverviewDashboard({
   user,
   overview,
   cubes,
   sessions,
   onOpenSource,
+  onOpenSources,
   onOpenSession,
   onStartAnalysis,
   onOpenSchemas,
@@ -40,6 +72,7 @@ export function OverviewDashboard({
   cubes: Cube[];
   sessions: Session[];
   onOpenSource: (id: string) => void;
+  onOpenSources?: () => void;
   onOpenSession: (session: Session) => void;
   onStartAnalysis: () => void;
   onOpenSchemas: () => void;
@@ -63,12 +96,14 @@ export function OverviewDashboard({
 
   function sessionName(item: Session) {
     const ids = item.cube_ids?.length ? item.cube_ids : [item.cube_id];
-    return (
-      ids
-        .map((id) => cubes.find((c) => c.id === id)?.definition.name)
-        .filter(Boolean)
-        .join(" + ") || tChats.fallbackName
-    );
+    const names = ids
+      .map((id) => cubes.find((c) => c.id === id)?.definition.name)
+      .filter(Boolean) as string[];
+
+    if (!names.length) return tChats.fallbackName;
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} & ${names[1]}`;
+    return `${names[0]} (+${names.length - 1} tables)`;
   }
 
   return (
@@ -125,7 +160,7 @@ export function OverviewDashboard({
         {/* Data Sources Card */}
         <div
           className="stat-card clickable"
-          onClick={onOpenUpload}
+          onClick={() => (onOpenSources ? onOpenSources() : onOpenUpload())}
           role="button"
           tabIndex={0}
         >
@@ -174,7 +209,9 @@ export function OverviewDashboard({
           </div>
           <div className="stat-info">
             <span className="stat-label">{t.modelStat}</span>
-            <strong className="stat-value model-name">{modelName}</strong>
+            <strong className="stat-value model-name" title={modelName}>
+              {formatModelName(modelName)}
+            </strong>
             <span className="stat-sub mode-tag">{t.modelCostBadge(modelCost)}</span>
           </div>
           <ChevronRight size={18} className="stat-arrow" />
@@ -333,7 +370,7 @@ export function OverviewDashboard({
                   <div className="source-main">
                     <div className="source-title-wrap">
                       <span className="source-kind-badge">{source.kind.toUpperCase()}</span>
-                      <strong>{source.name}</strong>
+                      <strong title={source.name}>{formatSourceName(source)}</strong>
                     </div>
                     <small className="source-meta">
                       {source.schema_name} · {source.table_count ?? source.manifest?.tables?.length ?? 1} tables

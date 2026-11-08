@@ -356,3 +356,42 @@ async def test_missing_selected_table_does_not_call_model(monkeypatch):
             None, settings(), DEFINITIONS[0], "join", [], selected_cubes=[DEFINITIONS[0], missing]
         )
     client.responses.create.assert_not_called()
+
+
+async def test_suggest_tables_no_api_key():
+    from backend.services.chat_agent import suggest_tables
+
+    cfg = settings(key="")
+    cubes = [
+        {"schema": "public", "table": "orders", "name": "orders", "fields": []},
+        {"schema": "public", "table": "customers", "name": "customers", "fields": []},
+    ]
+    res = await suggest_tables("Show me orders", cubes, cfg)
+    assert "public.orders" in res["table_refs"]
+
+
+async def test_suggest_tables_with_mock_llm(monkeypatch):
+    from backend.services.chat_agent import suggest_tables
+
+    cfg = settings(key="mock-key")
+    object.__setattr__(cfg, "openai_base_url", "https://bedrock-mantle.eu-north-1.api.aws/v1")
+    cubes = [
+        {"schema": "public", "table": "orders", "name": "orders", "fields": [{"name": "id", "type": "int"}]},
+        {"schema": "public", "table": "products", "name": "products", "fields": [{"name": "name", "type": "text"}]},
+    ]
+
+    mock_resp = SimpleNamespace(
+        status="completed",
+        output=[SimpleNamespace(text=json.dumps({"table_refs": ["public.orders"], "reasoning": "Orders table matches"}))]
+    )
+    mock_client = AsyncMock()
+    mock_client.responses.create = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    monkeypatch.setattr("backend.services.chat_agent.AsyncOpenAI", lambda **kwargs: mock_client)
+
+    res = await suggest_tables("Show top orders", cubes, cfg)
+    assert res["table_refs"] == ["public.orders"]
+    assert "Orders table matches" in res["reasoning"]
+

@@ -21,10 +21,12 @@ import {
   Settings as SettingsIcon,
   AlertCircle,
   X,
+  Sliders,
 } from "lucide-react";
 import {
   api,
   askAgent,
+  suggestTables,
   type AgentStep,
   type Cube,
   type Message,
@@ -37,11 +39,11 @@ import {
 } from "@/lib/api";
 import { ChatTables } from "./chat-tables";
 import { ChatSidebar } from "./chat-sidebar";
-import { SchemaSidebar } from "./schema-sidebar";
 import { ImportData } from "./import-data";
 import { SourceDashboard } from "./source-dashboard";
 import { OverviewDashboard } from "./overview-dashboard";
-import { SchemaVisualizer } from "./schema-visualizer";
+import { ProfileMainPage } from "./profile-main-page";
+import { SettingsView } from "./settings-view";
 import { SettingsDialog } from "./settings-dialog";
 import { useRouter } from "next/navigation";
 import { ChatThread } from "./ai-elements/chat-thread";
@@ -55,7 +57,7 @@ import { useT } from "@/lib/i18n/client";
 
 export function Workspace() {
   const router = useRouter();
-  const { t: dictionary, intl } = useT();
+  const { t: dictionary, intl, locale } = useT();
   const t = dictionary.workspace;
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
     [user, setUser] = useState<UserInfo | undefined>(),
@@ -69,7 +71,7 @@ export function Workspace() {
     [error, setError] = useState(""),
     [tab, setTab] = useState<"analysis" | "schema">("analysis");
   const [view, setView] = useState<
-    "overview" | "analysis" | "schemas" | "dashboard" | "upload"
+    "overview" | "sources" | "upload" | "settings" | "profile-main" | "profile-chat"
   >("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"model" | "credits">("model");
@@ -82,11 +84,11 @@ export function Workspace() {
   const [loadingData, setLoadingData] = useState(true);
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
   const messageSequence = useRef(0);
   const [selectedSource, setSelectedSource] = useState("");
   const [extraCubeIds, setExtraCubeIds] = useState<string[]>([]);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [autoSelectingTables, setAutoSelectingTables] = useState(false);
   const [overview, setOverview] = useState<SourceOverview>({
     sources: [],
     available_schemas: [],
@@ -98,12 +100,13 @@ export function Workspace() {
       max_columns: 128,
     },
   });
+
   const activeSource = overview.sources.find(
     (source) => source.id === selectedSource,
   );
   const sourceCubes = cubes.filter((c) => c.source_id === selectedSource);
-  const cube = cubes.find((c) => c.id === selected);
-  const chatCubeIds = [selected, ...extraCubeIds];
+  const cube = cubes.find((c) => c.id === selected) || sourceCubes[0];
+  const chatCubeIds = [selected || cube?.id || "", ...extraCubeIds].filter(Boolean);
   const candidateCubes = cubes.filter((candidate) => {
     const source = overview.sources.find(
       (item) => item.id === candidate.source_id,
@@ -125,11 +128,18 @@ export function Workspace() {
     );
   });
   const suggestedDimension =
-    cube?.definition.dimensions.find(
+    cube?.definition.dimensions?.find(
       (name) =>
         !cube.definition.fields.find((field) => field.name === name)?.key &&
         name !== "id",
-    ) || cube?.definition.dimensions[0];
+    ) || cube?.definition.dimensions?.[0];
+
+  const isProfileMode =
+    Boolean(activeSource) &&
+    (view === "profile-main" || view === "profile-chat");
+
+  const showSidebar = isProfileMode;
+
   async function load() {
     setLoadingData(true);
     try {
@@ -139,36 +149,59 @@ export function Workspace() {
         api<SourceOverview>("sources"),
       ]);
       setCubes(list);
-      setOverview(sourceData);
-      const sourceId = sourceData.sources.some(
-        (source) => source.id === selectedSource,
-      )
-        ? selectedSource
-        : list[0]?.source_id || sourceData.sources[0]?.id || "";
-      setSelectedSource(sourceId);
       setSessions(history);
-      setSelected((previous) =>
-        list.some((c) => c.id === previous && c.source_id === sourceId)
-          ? previous
-          : list.find((c) => c.source_id === sourceId)?.id || "",
-      );
-      return { cubes: list, sources: sourceData.sources };
+      setOverview(sourceData);
+
+      if (selectedSource) {
+        const matching = list.filter((c) => c.source_id === selectedSource);
+        if (matching.length && !matching.some((c) => c.id === selected)) {
+          setSelected(matching[0].id);
+        }
+      }
+      return { cubes: list, sessions: history, overview: sourceData };
+    } catch (e) {
+      setError((e as Error).message);
+      return { cubes: [], sessions: [], overview };
     } finally {
       setLoadingData(false);
     }
   }
+
   function openSource(id: string, availableCubes = cubes) {
-    setRightOpen(false);
     setSelectedSource(id);
-    setSelected(availableCubes.find((c) => c.source_id === id)?.id || "");
+    const sourceCubesList = availableCubes.filter((c) => c.source_id === id);
+    setSelected(sourceCubesList[0]?.id || "");
     setSession("");
     setExtraCubeIds([]);
     setMessages([]);
     setQuestion("");
     setError("");
     setTab("analysis");
-    setView("analysis");
+    setView("profile-main");
   }
+
+  function startChatFromProfile(prompt?: string, cubeIds?: string[]) {
+    if (prompt) {
+      setQuestion(prompt);
+    }
+    if (cubeIds && cubeIds.length) {
+      setSelected(cubeIds[0]);
+      setExtraCubeIds(cubeIds.slice(1));
+    }
+    setView("profile-chat");
+  }
+
+  function closeSource() {
+    setSelectedSource("");
+    setSelected("");
+    setSession("");
+    setExtraCubeIds([]);
+    setMessages([]);
+    setQuestion("");
+    setError("");
+    setView("overview");
+  }
+
   async function sourceComplete(source: Source) {
     const latest = await load();
     setUser((prev) =>
@@ -176,6 +209,7 @@ export function Workspace() {
     );
     openSource(source.id, latest.cubes);
   }
+
   useEffect(() => {
     api<UserInfo>("users/me")
       .then((userData) => {
@@ -188,20 +222,19 @@ export function Workspace() {
         router.replace("/login");
       });
   }, []);
+
   useEffect(() => {
     const resetDrawers = () => {
       setLeftOpen(false);
-      setRightOpen(false);
     };
     window.addEventListener("resize", resetDrawers);
     return () => window.removeEventListener("resize", resetDrawers);
   }, []);
+
   useEffect(() => {
-    if (!leftOpen && !rightOpen) return;
+    if (!leftOpen) return;
     const previous = document.activeElement as HTMLElement | null;
-    const panel = document.getElementById(
-      leftOpen ? "chat-sidebar" : "schema-sidebar",
-    );
+    const panel = document.getElementById("chat-sidebar");
     const focusable = () =>
       Array.from(
         panel?.querySelectorAll<HTMLElement>(
@@ -212,7 +245,6 @@ export function Workspace() {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setLeftOpen(false);
-        setRightOpen(false);
       }
       if (event.key === "Tab") {
         const elements = focusable();
@@ -232,22 +264,34 @@ export function Workspace() {
       document.removeEventListener("keydown", onKey);
       previous?.focus();
     };
-  }, [leftOpen, rightOpen]);
+  }, [leftOpen]);
+
   function choose(id: string) {
-    setRightOpen(false);
     setLeftOpen(false);
-    setTab("analysis");
-    setView("analysis");
-    setSelectedSource(
-      cubes.find((c) => c.id === id)?.source_id || selectedSource,
-    );
-    setQuestion("");
     setSelected(id);
+    const c = cubes.find((item) => item.id === id);
+    if (c?.source_id && c.source_id !== selectedSource) {
+      setSelectedSource(c.source_id);
+    }
+    setQuestion("");
     setSession("");
     setExtraCubeIds([]);
     setMessages([]);
     setError("");
+    setTab("analysis");
   }
+
+  function newChat() {
+    setLeftOpen(false);
+    setSession("");
+    setMessages([]);
+    setQuestion("");
+    setAgentSteps([]);
+    setExtraCubeIds([]);
+    setError("");
+    setView("profile-chat");
+  }
+
   async function discover() {
     setBusy(true);
     setError("");
@@ -261,6 +305,7 @@ export function Workspace() {
       setBusy(false);
     }
   }
+
   async function openSession(item: Session) {
     setBusy(true);
     setError("");
@@ -274,7 +319,7 @@ export function Workspace() {
       setSelectedSource(
         cubes.find((c) => c.id === item.cube_id)?.source_id || "",
       );
-      setView("analysis");
+      setView("profile-chat");
       setSession(item.id);
       setExtraCubeIds(
         (history.cube_ids || [item.cube_id]).filter(
@@ -289,6 +334,7 @@ export function Workspace() {
       setBusy(false);
     }
   }
+
   async function changeChatTables(ids: string[]) {
     if (busy) return;
     setBusy(true);
@@ -308,12 +354,13 @@ export function Workspace() {
           item.id === session ? { ...item, cube_ids: selectedIds } : item,
         ),
       );
-    } catch (error) {
-      setError((error as Error).message);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
+
   function appendMessage(question: string, result: Result) {
     const message = {
       id: `local-${++messageSequence.current}`,
@@ -322,6 +369,45 @@ export function Workspace() {
     };
     setMessages((previous) => [...previous, message]);
   }
+
+  async function countRows() {
+    if (!cube) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<Result>(`cubes/${cube.id}/analyze`, {
+        plan: {
+          clarification: null,
+          groups: [],
+          metrics: [{ field: null, aggregation: "count" }],
+          filters: [],
+          order_by: null,
+        },
+      });
+      appendMessage(t.countRowsQuestion, result);
+      setTab("analysis");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function profile() {
+    if (!cube) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<Result>(`cubes/${cube.id}/profile`, {});
+      appendMessage(t.profileQuestion, result);
+      setTab("analysis");
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function ask(event: React.FormEvent) {
     event.preventDefault();
     if (busy || !question.trim() || !cube) return;
@@ -343,17 +429,36 @@ export function Workspace() {
     const text = question.trim();
     setPendingQuestion(text);
     setQuestion("");
+
+    let effectiveCubeIds = chatCubeIds;
+    if (activeSource) {
+      setAutoSelectingTables(true);
+      try {
+        const suggestion = await suggestTables(text, activeSource.id);
+        if (suggestion.cube_ids && suggestion.cube_ids.length > 0) {
+          effectiveCubeIds = Array.from(
+            new Set([...chatCubeIds, ...suggestion.cube_ids]),
+          );
+          setExtraCubeIds(effectiveCubeIds.filter((id) => id !== selected));
+        }
+      } catch {
+        // Fallback to currently selected tables
+      } finally {
+        setAutoSelectingTables(false);
+      }
+    }
+
     try {
       let id = session;
       if (!id) {
         const created = await api<{ id: string }>("chat/session", {
           cube_id: selected,
-          cube_ids: chatCubeIds,
+          cube_ids: effectiveCubeIds,
         });
         id = created.id;
         setSession(id);
       }
-      const result = await askAgent(id, text, (step) => {
+      const result = await askAgent(id, text, (step: AgentStep) => {
         setAgentSteps((previous) => {
           const found = previous.some((item) => item.id === step.id);
           return found
@@ -373,62 +478,60 @@ export function Workspace() {
         );
       }
       setAgentSteps([]);
-      // Refreshing the sidebar must not turn a delivered answer into a chat error.
       void api<Session[]>("chat/sessions")
         .then(setSessions)
         .catch(() => {});
-    } catch (e) {
+    } catch (e: any) {
       setQuestion((draft) => draft || text);
-      setError((e as Error).message);
+      if (
+        e?.status === 402 ||
+        e?.detail?.needed_credits ||
+        e?.message?.includes("credits")
+      ) {
+        const detail = e.detail || {};
+        const needed =
+          detail.needed_credits ||
+          getModelCreditCost(user?.model_settings?.model || "gpt-4o-mini");
+        const balance = detail.current_balance ?? user?.credits ?? 0;
+        setInsufficientCredits({
+          open: true,
+          needed,
+          balance,
+          model: detail.model || user?.model_settings?.model || "gpt-4o-mini",
+        });
+      }
+      setError(e.message || "Failed to process analytical query.");
     } finally {
       setPendingQuestion("");
       setBusy(false);
     }
   }
-  async function countRows() {
-    if (!cube) return;
+
+  async function deleteSession(id: string) {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
-      const result = await api<Result>(`cubes/${cube.id}/analyze`, {
-        plan: {
-          clarification: null,
-          groups: [],
-          metrics: [{ field: null, aggregation: "count" }],
-          filters: [],
-          order_by: null,
-          descending: false,
-          limit: 1,
-        },
-      });
-      appendMessage(t.countRowsQuestion, result);
-      setTab("analysis");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function profile() {
-    if (!cube) return;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api<Result>(`cubes/${cube.id}/profile`, {});
-      appendMessage(t.profileQuestion, result);
-      setTab("analysis");
+      await api(`chat/session/${id}`, {}, "DELETE");
+      setSessions((previous) => previous.filter((item) => item.id !== id));
+      if (session === id) {
+        setSession("");
+        setMessages([]);
+        setQuestion("");
+        setAgentSteps([]);
+        setExtraCubeIds([]);
+      }
     } catch (error) {
       setError((error as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function signOut() {
+
+  async function resetWorkspace() {
+    if (busy) return;
     try {
-      await api("logout", {});
-      setAuthenticated(false);
-      router.replace("/");
-      setMessages([]);
+      await api("cubes/reset", {}, "POST");
       setSession("");
       setExtraCubeIds([]);
       setCubes([]);
@@ -440,165 +543,227 @@ export function Workspace() {
         available_schemas: [],
       }));
       setSelectedSource("");
-      setView("dashboard");
-
+      setView("overview");
       setLeftOpen(false);
-      setRightOpen(false);
       setError("");
     } catch (error) {
       setError((error as Error).message);
     }
   }
+
+  async function signOut() {
+    try {
+      await api("auth/logout", {}, "POST");
+    } finally {
+      router.push("/login");
+    }
+  }
+
   if (authenticated === null)
     return (
       <main className="loading-screen" role="status">
-        {t.connecting}
+        <RefreshCw size={24} className="spin" />
+        <p>{t.connecting}</p>
       </main>
     );
   if (!authenticated)
     return (
       <main className="loading-screen" role="status">
-        {t.openingSignIn}
+        <RefreshCw size={24} className="spin" />
+        <p>{t.openingSignIn}</p>
       </main>
     );
+
   return (
-    <div className="workspace">
-      {(leftOpen || rightOpen) && (
+    <div className={`workspace ${!showSidebar ? "no-sidebar" : ""}`}>
+      {showSidebar && leftOpen && (
         <Button
           variant="ghost"
           size="plain"
           className="panel-backdrop"
           tabIndex={-1}
           aria-label={t.closeSidebar}
-          onClick={() => {
-            setLeftOpen(false);
-            setRightOpen(false);
-          }}
+          onClick={() => setLeftOpen(false)}
         />
       )}
-      <ChatSidebar
-        leftOpen={leftOpen}
-        rightOpen={rightOpen}
-        busy={busy}
-        cubes={cubes}
-        sessions={sourceSessions}
-        session={session}
-        activeSource={activeSource}
-        onClose={() => setLeftOpen(false)}
-        onNewChat={() => choose(selected)}
-        onOpenSession={openSession}
-        onSignOut={signOut}
-        onOpenSettings={() => {
-          setSettingsTab("model");
-          setSettingsOpen(true);
-        }}
-      />
-      <main className="main-panel" inert={leftOpen || rightOpen}>
+      {showSidebar && (
+        <ChatSidebar
+          leftOpen={leftOpen}
+          busy={busy}
+          cubes={cubes}
+          sessions={sourceSessions}
+          session={session}
+          activeSource={activeSource}
+          onClose={() => setLeftOpen(false)}
+          onNewChat={newChat}
+          onOpenSession={openSession}
+          onSignOut={signOut}
+          onOpenSettings={() => {
+            setSettingsTab("model");
+            setSettingsOpen(true);
+          }}
+          onCloseSource={closeSource}
+          onSwitchSource={() => setView("sources")}
+        />
+      )}
+      <main className="main-panel" inert={showSidebar && leftOpen ? true : undefined}>
         <header className="topbar">
           <div className="workspace-crumb">
-            <Button
-              variant="ghost"
-              size="plain"
-              className="icon-button mobile-toggle"
-              aria-label={t.openChats}
-              aria-expanded={leftOpen}
-              aria-controls="chat-sidebar"
-              onClick={() => {
-                setLeftOpen(!leftOpen);
-                setRightOpen(false);
-              }}
-            >
-              <MessageSquare size={19} />
-            </Button>
-            <span className="desktop-crumb">
-              {t.crumb} <ChevronRight size={14} />
-            </span>
-            <strong>
-              {view === "overview"
-                ? t.overviewNav
-                : view === "schemas"
-                ? t.schemasNav
-                : view === "dashboard"
-                ? t.sourcesTitle
-                : view === "upload"
-                ? t.uploadTitle
-                : t.analysisTitle}
-            </strong>
+            {showSidebar && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="icon-button mobile-toggle"
+                aria-label={t.openChats}
+                aria-expanded={leftOpen}
+                aria-controls="chat-sidebar"
+                onClick={() => setLeftOpen(!leftOpen)}
+              >
+                <MessageSquare size={19} />
+              </Button>
+            )}
+
+            {isProfileMode && activeSource ? (
+              <div className="topbar-breadcrumbs">
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  className="breadcrumb-root-btn"
+                  onClick={closeSource}
+                >
+                  <LayoutDashboard size={14} />
+                  <span>{t.overviewNav}</span>
+                </Button>
+                <ChevronRight size={14} className="breadcrumb-chevron" />
+                <strong className="profile-active-title" title={activeSource.schema_name}>
+                  <bdi>{activeSource.name || activeSource.schema_name}</bdi>
+                </strong>
+              </div>
+            ) : (
+              <div className="topbar-breadcrumbs">
+                <span className="desktop-crumb">
+                  {t.crumb} <ChevronRight size={14} />
+                </span>
+                <strong>
+                  {view === "overview"
+                    ? t.overviewNav
+                    : view === "sources"
+                    ? t.dataSourcesNav
+                    : view === "upload"
+                    ? t.uploadNav
+                    : t.settingsNav}
+                </strong>
+              </div>
+            )}
           </div>
-          <nav className="workspace-nav" aria-label={t.nav}>
-            <Button
-              variant="ghost"
-              size="plain"
-              className={view === "overview" ? "active" : ""}
-              aria-current={view === "overview" ? "page" : undefined}
-              disabled={busy}
-              onClick={() => {
-                setView("overview");
-                setError("");
-              }}
-            >
-              <LayoutDashboard size={15} />
-              <span>{t.overviewNav}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="plain"
-              className={view === "analysis" ? "active" : ""}
-              aria-current={view === "analysis" ? "page" : undefined}
-              disabled={busy}
-              onClick={() => {
-                setView("analysis");
-                setTab("analysis");
-              }}
-            >
-              <Sparkles size={15} />
-              <span>{t.chat}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="plain"
-              className={view === "schemas" ? "active" : ""}
-              aria-current={view === "schemas" ? "page" : undefined}
-              disabled={busy}
-              onClick={() => {
-                setView("schemas");
-                setError("");
-              }}
-            >
-              <Layers3 size={15} />
-              <span>{t.schemasNav}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="plain"
-              className={view === "dashboard" ? "active" : ""}
-              aria-current={view === "dashboard" ? "page" : undefined}
-              disabled={busy}
-              onClick={() => {
-                setView("dashboard");
-                setError("");
-              }}
-            >
-              <FolderOpen size={15} />
-              <span>{t.sources}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="plain"
-              className={view === "upload" ? "active" : ""}
-              aria-current={view === "upload" ? "page" : undefined}
-              disabled={busy}
-              onClick={() => {
-                setView("upload");
-                setError("");
-              }}
-            >
-              <Upload size={15} />
-              <span>{t.upload}</span>
-            </Button>
-          </nav>
+
+          {isProfileMode && activeSource ? (
+            <nav className="topbar-profile-subnav" aria-label="Profile navigation">
+              <Button
+                variant="ghost"
+                size="plain"
+                className={`profile-subnav-btn ${view === "profile-main" ? "active" : ""}`}
+                aria-current={view === "profile-main" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("profile-main");
+                  setError("");
+                }}
+              >
+                <Table2 size={15} />
+                <span>{dictionary.workspace.dataStructureNav}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={`profile-subnav-btn ${view === "profile-chat" ? "active" : ""}`}
+                aria-current={view === "profile-chat" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("profile-chat");
+                  setError("");
+                }}
+              >
+                <Sparkles size={15} />
+                <span>{dictionary.workspace.chatNav}</span>
+              </Button>
+            </nav>
+          ) : (
+            <nav className="workspace-nav" aria-label={t.nav}>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={view === "overview" ? "active" : ""}
+                aria-current={view === "overview" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("overview");
+                  setError("");
+                }}
+              >
+                <LayoutDashboard size={15} />
+                <span>{t.overviewNav}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={view === "sources" ? "active" : ""}
+                aria-current={view === "sources" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("sources");
+                  setError("");
+                }}
+              >
+                <FolderOpen size={15} />
+                <span>{t.dataSourcesNav}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={view === "upload" ? "active" : ""}
+                aria-current={view === "upload" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("upload");
+                  setError("");
+                }}
+              >
+                <Upload size={15} />
+                <span>{t.uploadNav}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={view === "settings" ? "active" : ""}
+                aria-current={view === "settings" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("settings");
+                  setError("");
+                }}
+              >
+                <Sliders size={15} />
+                <span>{t.settingsNav}</span>
+              </Button>
+            </nav>
+          )}
 
           <div className="topbar-controls">
+            {activeSource && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="close-profile-topbar-btn"
+                onClick={closeSource}
+                title={t.closeProfileHint}
+                aria-label={t.closeProfileAria}
+              >
+                <X size={13} />
+                <span>{locale === "ar" ? "إغلاق الملف" : "Close Profile"}</span>
+              </Button>
+            )}
+
             <Button
               variant="ghost"
               size="plain"
@@ -648,26 +813,11 @@ export function Workspace() {
             >
               <SettingsIcon size={16} />
             </Button>
-
-            <Button
-              variant="ghost"
-              size="plain"
-              className="schema-toggle secondary"
-              aria-label={t.openSchemas}
-              aria-expanded={rightOpen}
-              aria-controls="schema-sidebar"
-              onClick={() => {
-                setRightOpen(!rightOpen);
-                setLeftOpen(false);
-              }}
-            >
-              <Database size={16} />
-              <span>{t.schemas}</span>
-            </Button>
           </div>
         </header>
+
         <div
-          className={`page-content ${view === "analysis" ? "analysis-content" : ""}`}
+          className={`page-content ${view === "profile-chat" ? "analysis-content" : ""}`}
         >
           {loadingData ? (
             <div className="workspace-loading" role="status">
@@ -675,474 +825,279 @@ export function Workspace() {
               <h2>{t.preparing}</h2>
               <p>{t.loading}</p>
             </div>
-          ) : view === "overview" ? (
+          ) : view === "profile-main" && activeSource ? (
+            <ProfileMainPage
+              source={activeSource}
+              cubes={sourceCubes}
+              overview={overview}
+              user={user}
+              selectedCubeId={selected}
+              onSelectTable={(id) => setSelected(id)}
+              onStartChat={(prompt, cubeIds) => startChatFromProfile(prompt, cubeIds)}
+              onDiscover={discover}
+              onCloseProfile={closeSource}
+              busy={busy}
+            />
+          ) : view === "profile-chat" && activeSource && cube ? (
+            <section className="analysis-panel chat-mode">
+              <div className="profile-chat-header-bar">
+                <div className="chat-profile-info">
+                  <span className={`source-icon-sm ${activeSource.kind}`}>
+                    <Database size={16} />
+                  </span>
+                  <div>
+                    <h3><bdi>{activeSource.name || activeSource.schema_name}</bdi></h3>
+                    <small>
+                      {sourceCubes.length} {locale === "ar" ? "جداول" : "tables"} · {activeSource.kind === "existing" ? "PostgreSQL" : activeSource.kind.toUpperCase()}
+                    </small>
+                  </div>
+                </div>
+                <div className="chat-header-actions">
+                  <Button
+                    variant="ghost"
+                    size="plain"
+                    className="secondary view-structure-btn"
+                    onClick={() => setView("profile-main")}
+                  >
+                    <Table2 size={15} />
+                    <span>{dictionary.workspace.dataStructureNav}</span>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="chat-body">
+                <ChatThread
+                  key={session || selected}
+                  messages={messages}
+                  pendingQuestion={pendingQuestion}
+                  steps={agentSteps}
+                  busy={busy && !!pendingQuestion}
+                >
+                  <div className="conversation-empty">
+                    <span className="sparkle">
+                      <Sparkles size={26} />
+                    </span>
+                    <h2>
+                      <bdi>{t.profileTitle(activeSource.schema_name)}</bdi>
+                    </h2>
+                    <p>
+                      <span>{t.profileDesc1(activeSource.schema_name, sourceCubes.length)}</span>
+                      <br />
+                      <span>{t.profileDesc2}</span>
+                    </p>
+                    <div className="suggestions">
+                      <Button
+                        variant="ghost"
+                        size="plain"
+                        disabled={busy}
+                        onClick={() => setQuestion(t.plotGraphPrompt)}
+                      >
+                        <BarChart3 size={17} />
+                        <span>
+                          {t.plotGraph}
+                          <small>{t.plotGraphHint}</small>
+                        </span>
+                        <ChevronRight size={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="plain"
+                        disabled={busy}
+                        onClick={() => setQuestion(t.writeAnalysisPrompt)}
+                      >
+                        <Sparkles size={17} />
+                        <span>
+                          {t.writeAnalysis}
+                          <small>{t.writeAnalysisHint}</small>
+                        </span>
+                        <ChevronRight size={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="plain"
+                        disabled={busy}
+                        onClick={countRows}
+                      >
+                        <Table2 size={17} />
+                        <span>
+                          {t.countRows}
+                          <small>{t.countRowsHint}</small>
+                        </span>
+                        <ChevronRight size={16} />
+                      </Button>
+                      {sourceCubes.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="plain"
+                          disabled={busy}
+                          onClick={() => {
+                            void changeChatTables(
+                              sourceCubes.map((c) => c.id),
+                            );
+                          }}
+                        >
+                          <Layers3 size={17} />
+                          <span>
+                            {t.allTablesAction(sourceCubes.length)}
+                            <small>{t.allTablesActionHint}</small>
+                          </span>
+                          <ChevronRight size={16} />
+                        </Button>
+                      )}
+                      {suggestedDimension && (
+                        <Button
+                          variant="ghost"
+                          size="plain"
+                          disabled={busy}
+                          onClick={() =>
+                            setQuestion(t.countBy(suggestedDimension))
+                          }
+                        >
+                          <Layers3 size={17} />
+                          <span>
+                            {t.compare}
+                            <small>{suggestedDimension}</small>
+                          </span>
+                          <ChevronRight size={16} />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </ChatThread>
+                <div className="composer-wrap">
+                  {error && (
+                    <p className="error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  {autoSelectingTables && (
+                    <p className="auto-select-hint" role="status">
+                      <RefreshCw size={12} className="spin" />
+                      {t.identifyingTables}
+                    </p>
+                  )}
+                  <form onSubmit={ask}>
+                    <InputGroup className="composer">
+                      <label className="sr-only" htmlFor="question">
+                        {t.askLabel}
+                      </label>
+                      <InputGroupTextarea
+                        id="question"
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        disabled={busy}
+                        maxLength={2000}
+                        placeholder={t.askProfilePlaceholder(activeSource.schema_name)}
+                        rows={1}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            !e.nativeEvent.isComposing
+                          ) {
+                            e.preventDefault();
+                            e.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                      />
+                      <InputGroupAddon
+                        align="block-end"
+                        className="composer-footer"
+                      >
+                        <div className="composer-tables-group">
+                          <span className="auto-detect-badge" title={t.autoDetectHint}>
+                            <Sparkles size={12} /> {t.autoDetectTables}
+                          </span>
+                          <ChatTables
+                            primary={cube}
+                            candidates={candidateCubes}
+                            selectedIds={chatCubeIds}
+                            busy={busy}
+                            onChange={changeChatTables}
+                          />
+                        </div>
+                        <InputGroupButton
+                          variant="default"
+                          size="icon-sm"
+                          className="send-button"
+                          type="submit"
+                          disabled={busy || !question.trim()}
+                          aria-label={t.send}
+                        >
+                          <ArrowUp size={18} />
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </form>
+                  <p className="composer-note">{t.composerNote}</p>
+                </div>
+              </div>
+            </section>
+          ) : view === "sources" ? (
+            <SourceDashboard
+              overview={overview}
+              activeSourceId={selectedSource}
+              onOpen={openSource}
+              onCloseSource={closeSource}
+              onComplete={sourceComplete}
+              onRefresh={async () => {
+                await load();
+              }}
+            />
+          ) : view === "upload" ? (
+            <ImportData
+              limits={overview.limits}
+              onCancel={() => setView("sources")}
+              onComplete={sourceComplete}
+            />
+          ) : view === "settings" ? (
+            <SettingsView
+              user={user}
+              onUserUpdate={(updated) =>
+                setUser((prev) => (prev ? { ...prev, ...updated } : prev))
+              }
+              onSignOut={signOut}
+            />
+          ) : (
             <OverviewDashboard
               user={user}
               overview={overview}
               cubes={cubes}
               sessions={sessions}
               onOpenSource={openSource}
+              onOpenSources={() => setView("sources")}
               onOpenSession={openSession}
               onStartAnalysis={() => {
-                setView("analysis");
-                setTab("analysis");
+                if (overview.sources.length > 0) {
+                  openSource(overview.sources[0].id);
+                } else {
+                  setView("upload");
+                }
               }}
-              onOpenSchemas={() => setView("schemas")}
+              onOpenSchemas={() => {
+                if (overview.sources.length > 0) {
+                  openSource(overview.sources[0].id);
+                } else {
+                  setView("sources");
+                }
+              }}
               onOpenUpload={() => setView("upload")}
               onOpenSettings={(targetTab) => {
-                setSettingsTab(targetTab || "model");
-                setSettingsOpen(true);
+                setView("settings");
               }}
               onAskPrompt={(prompt) => {
-                setQuestion(prompt);
-                setView("analysis");
-                setTab("analysis");
+                if (overview.sources.length > 0) {
+                  openSource(overview.sources[0].id);
+                  startChatFromProfile(prompt);
+                } else {
+                  setView("upload");
+                }
               }}
             />
-          ) : view === "schemas" ? (
-            <SchemaVisualizer
-              overview={overview}
-              cubes={cubes}
-              selectedCubeId={selected}
-              selectedSourceId={selectedSource}
-              onSelectTable={(id) => setSelected(id)}
-              onSelectSource={openSource}
-              onAskAboutTable={(c) => {
-                setSelected(c.id);
-                setView("analysis");
-                setTab("analysis");
-              }}
-              onProfileTable={profile}
-            />
-          ) : view === "upload" ? (
-            <ImportData
-              limits={overview.limits}
-              onCancel={() => setView("dashboard")}
-              onComplete={sourceComplete}
-            />
-          ) : view === "dashboard" ? (
-            <>
-              {error && (
-                <p className="error" role="alert">
-                  {error}
-                </p>
-              )}
-              <SourceDashboard
-                overview={overview}
-                onOpen={openSource}
-                onComplete={sourceComplete}
-                onRefresh={async () => {
-                  await load();
-                }}
-              />
-            </>
-          ) : (
-            <section
-              className={
-                cube
-                  ? `analysis-panel ${tab === "analysis" ? "chat-mode" : ""}`
-                  : "analysis-empty"
-              }
-            >
-              <div className="page-heading">
-                <div>
-                  <span className="eyebrow">{t.eyebrow}</span>
-                  <h1>{t.heading}</h1>
-                  <p className="muted">
-                    {activeSource
-                      ? t.exploring(activeSource.schema_name)
-                      : t.connectPrompt}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="plain"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={discover}
-                >
-                  <RefreshCw size={15} className={busy ? "spin" : ""} />
-                  {t.discoverCubes}
-                </Button>
-              </div>
-              {!cube ? (
-                <section className="empty-card">
-                  <Database size={38} />
-                  <h2>{selectedSource ? t.noTables : t.startWithData}</h2>
-                  <p>{selectedSource ? t.noTablesText : t.startWithDataText}</p>
-                  <Button
-                    variant="ghost"
-                    size="plain"
-                    className="primary"
-                    onClick={() =>
-                      selectedSource ? void discover() : setView("upload")
-                    }
-                    disabled={busy}
-                  >
-                    {selectedSource ? t.discoverTables : t.uploadData}{" "}
-                    <ArrowUp size={16} />
-                  </Button>
-                  {error && (
-                    <p className="error" role="alert">
-                      {error}
-                    </p>
-                  )}
-                </section>
-              ) : (
-                <>
-                  <div className="cube-overview">
-                    <div className="cube-title">
-                      <span className="cube-symbol">
-                        <Box size={25} />
-                      </span>
-                      <div>
-                        <h2>{cube.definition.name}</h2>
-                        <p>
-                          {cube.definition.schema}.{cube.definition.table}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="cube-stats">
-                      <div>
-                        <span>{t.dimensions}</span>
-                        <strong>{cube.definition.dimensions.length}</strong>
-                      </div>
-                      <div>
-                        <span>{t.candidateMeasures}</span>
-                        <strong>{cube.definition.measures.length}</strong>
-                      </div>
-                      <div>
-                        <span>{t.estimatedRows}</span>
-                        <strong>
-                          ~{cube.definition.estimated_rows.toLocaleString(intl)}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="tabs">
-                    <Button
-                      variant="ghost"
-                      size="plain"
-                      className={tab === "analysis" ? "active" : ""}
-                      onClick={() => setTab("analysis")}
-                    >
-                      <Sparkles size={16} />
-                      {t.analysisTab}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="plain"
-                      className={tab === "schema" ? "active" : ""}
-                      onClick={() => setTab("schema")}
-                    >
-                      <Table2 size={16} />
-                      {t.schemaTab}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="plain"
-                      className="new-analysis"
-                      disabled={busy}
-                      onClick={() => choose(selected)}
-                    >
-                      <Plus size={15} />
-                      {t.newAnalysis}
-                    </Button>
-                  </div>
-                  {error && tab === "schema" && (
-                    <p className="error" role="alert">
-                      {error}
-                    </p>
-                  )}
-                  {tab === "schema" ? (
-                    <section className="schema-card">
-                      <div className="profile-heading">
-                        <h3>{t.businessModel}</h3>
-                        <Button
-                          variant="ghost"
-                          size="plain"
-                          className="secondary"
-                          disabled={busy}
-                          onClick={profile}
-                        >
-                          {t.profile}
-                        </Button>
-                      </div>
-                      <p>{cube.definition.description}</p>
-                      <p className="muted">{cube.definition.grain}</p>
-                      {!!cube.definition.joins?.length && (
-                        <div className="source-relationships">
-                          <h3>{t.relatedDimensions}</h3>
-                          <p className="muted">{t.relatedText}</p>
-                          {cube.definition.joins.map((join) => (
-                            <p className="relationship" key={join.path}>
-                              <strong>{join.path}</strong> → {join.schema}.
-                              {join.table} · {t.manyToOne}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                      <div className="table-scroll">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>{t.field}</th>
-                              <th>{t.pgType}</th>
-                              <th>{t.role}</th>
-                              <th>{t.nullable}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cube.definition.fields.map((f) => (
-                              <tr key={f.name}>
-                                <td>{f.name}</td>
-                                <td>
-                                  <code>{f.type}</code>
-                                </td>
-                                <td>
-                                  {f.role?.replaceAll("_", " ") ||
-                                    (f.key ? t.identifier : t.dimension)}
-                                </td>
-                                <td>{f.nullable ? t.yes : t.no}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <h3>{t.candidateMeasures}</h3>
-                      <div className="chips">
-                        {cube.definition.measures.map((m, i) => (
-                          <span className="tag" key={i} title={m.description}>
-                            {m.label || `${m.aggregation}(${m.field || "*"})`}
-                          </span>
-                        ))}
-                      </div>
-                      {!!importedTable?.foreign_keys.length && (
-                        <div className="source-relationships">
-                          <h3>{t.importedRelationships}</h3>
-                          <p className="muted">{t.importedText}</p>
-                          {importedTable.foreign_keys.map((key, index) => (
-                            <p className="relationship" key={index}>
-                              {key.columns.join(", ")} → {key.target_table} (
-                              {key.target_columns.join(", ")})
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                      {!!cube.definition.suggested_questions?.length && (
-                        <div>
-                          <h3>{t.exploreModel}</h3>
-                          {cube.definition.suggested_questions.map(
-                            (suggestion) => (
-                              <Button
-                                variant="ghost"
-                                size="plain"
-                                className="secondary"
-                                key={suggestion}
-                                disabled={busy}
-                                onClick={() => {
-                                  setQuestion(suggestion);
-                                  setTab("analysis");
-                                }}
-                              >
-                                {suggestion}
-                              </Button>
-                            ),
-                          )}
-                        </div>
-                      )}
-                      {cube.definition.warnings.map((w) => (
-                        <p className="notice" key={w}>
-                          {w}
-                        </p>
-                      ))}
-                    </section>
-                  ) : (
-                    <div className="chat-body">
-                      <ChatThread
-                        key={session || selected}
-                        messages={messages}
-                        pendingQuestion={pendingQuestion}
-                        steps={agentSteps}
-                        busy={busy && !!pendingQuestion}
-                      >
-                        <div className="conversation-empty">
-                          <span className="sparkle">
-                            <Sparkles size={26} />
-                          </span>
-                          <h2>{t.emptyTitle}</h2>
-                          <p>
-                            {t.emptyExplore}{" "}
-                            <strong>{cube.definition.name}</strong>{" "}
-                            {t.emptyWith}
-                            <br />
-                            {t.emptyEvidence}
-                          </p>
-                          <div className="suggestions">
-                            <Button
-                              variant="ghost"
-                              size="plain"
-                              disabled={busy}
-                              onClick={() => setQuestion(t.plotGraphPrompt)}
-                            >
-                              <BarChart3 size={17} />
-                              <span>
-                                {t.plotGraph}
-                                <small>{t.plotGraphHint}</small>
-                              </span>
-                              <ChevronRight size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="plain"
-                              disabled={busy}
-                              onClick={() => setQuestion(t.writeAnalysisPrompt)}
-                            >
-                              <Sparkles size={17} />
-                              <span>
-                                {t.writeAnalysis}
-                                <small>{t.writeAnalysisHint}</small>
-                              </span>
-                              <ChevronRight size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="plain"
-                              disabled={busy}
-                              onClick={countRows}
-                            >
-                              <Table2 size={17} />
-                              <span>
-                                {t.countRows}
-                                <small>{t.countRowsHint}</small>
-                              </span>
-                              <ChevronRight size={16} />
-                            </Button>
-                            {sourceCubes.length > 1 && (
-                              <Button
-                                variant="ghost"
-                                size="plain"
-                                disabled={busy}
-                                onClick={() => {
-                                  void changeChatTables(
-                                    sourceCubes.map((c) => c.id),
-                                  );
-                                }}
-                              >
-                                <Layers3 size={17} />
-                                <span>
-                                  {t.allTablesAction(sourceCubes.length)}
-                                  <small>{t.allTablesActionHint}</small>
-                                </span>
-                                <ChevronRight size={16} />
-                              </Button>
-                            )}
-                            {suggestedDimension && (
-                              <Button
-                                variant="ghost"
-                                size="plain"
-                                disabled={busy}
-                                onClick={() =>
-                                  setQuestion(t.countBy(suggestedDimension))
-                                }
-                              >
-                                <Layers3 size={17} />
-                                <span>
-                                  {t.compare}
-                                  <small>{suggestedDimension}</small>
-                                </span>
-                                <ChevronRight size={16} />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </ChatThread>
-                      <div className="composer-wrap">
-                        {error && (
-                          <p className="error" role="alert">
-                            {error}
-                          </p>
-                        )}
-                        <form onSubmit={ask}>
-                          <InputGroup className="composer">
-                            <label className="sr-only" htmlFor="question">
-                              {t.askLabel}
-                            </label>
-                            <InputGroupTextarea
-                              id="question"
-                              value={question}
-                              onChange={(e) => setQuestion(e.target.value)}
-                              disabled={busy}
-                              maxLength={2000}
-                              placeholder={t.askPlaceholder(
-                                cube.definition.name,
-                              )}
-                              rows={1}
-                              onKeyDown={(e) => {
-                                if (
-                                  e.key === "Enter" &&
-                                  !e.shiftKey &&
-                                  !e.nativeEvent.isComposing
-                                ) {
-                                  e.preventDefault();
-                                  e.currentTarget.form?.requestSubmit();
-                                }
-                              }}
-                            />
-                            <InputGroupAddon
-                              align="block-end"
-                              className="composer-footer"
-                            >
-                              <ChatTables
-                                primary={cube}
-                                candidates={candidateCubes}
-                                selectedIds={chatCubeIds}
-                                busy={busy}
-                                onChange={changeChatTables}
-                              />
-                              <InputGroupButton
-                                variant="default"
-                                size="icon-sm"
-                                className="send-button"
-                                type="submit"
-                                disabled={busy || !question.trim()}
-                                aria-label={t.send}
-                              >
-                                <ArrowUp size={18} />
-                              </InputGroupButton>
-                            </InputGroupAddon>
-                          </InputGroup>
-                        </form>
-                        <p className="composer-note">{t.composerNote}</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
           )}
         </div>
       </main>
-      <SchemaSidebar
-        key={selectedSource}
-        leftOpen={leftOpen}
-        rightOpen={rightOpen}
-        busy={busy}
-        overview={overview}
-        selectedSource={selectedSource}
-        sourceCubes={sourceCubes}
-        selected={selected}
-        cube={cube}
-        onClose={() => setRightOpen(false)}
-        onSourceChange={openSource}
-        onChooseTable={choose}
-        onDiscover={discover}
-        onViewSchema={() => {
-          setView("analysis");
-          setTab("schema");
-        }}
-        onUpload={() => setView("upload")}
-      />
+
       <SettingsDialog
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -1151,6 +1106,7 @@ export function Workspace() {
           setUser((prev) => (prev ? { ...prev, ...updated } : prev));
         }}
       />
+
       {insufficientCredits?.open && (
         <div
           className="insufficient-credits-overlay"

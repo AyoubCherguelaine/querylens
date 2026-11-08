@@ -20,13 +20,84 @@ from backend.services.narrative import query_evidence, write_analysis
 from backend.services.planner import PlannerUnavailable
 
 logger = logging.getLogger(__name__)
+
+TABLE_SUGGEST_PROMPT = """You are a data analyst assistant. Given a user question and a list of available database tables with their columns, select the most relevant tables that would be needed to answer the question.
+
+Return a JSON object with:
+- "table_refs": array of schema.table strings for the selected tables (at most 5, in order of relevance)
+- "reasoning": a brief one-sentence explanation of why these tables were selected
+
+Rules:
+- Only select tables that actually appear in the provided list.
+- Prefer tables with columns that semantically match the question's subject matter.
+- Include related/join tables if the question likely requires them.
+- If the question is very general (e.g. "show me the data"), pick the most prominent-looking table.
+- Return valid JSON only, no markdown.
+"""
+
+async def suggest_tables(question: str, cubes: list, settings) -> dict:
+    """Use LLM to suggest the most relevant tables for a user question."""
+    if not settings.openai_api_key.get_secret_value():
+        # Fall back to returning all cubes (up to 5) if no API key
+        return {"table_refs": [f"{c['schema']}.{c['table']}" for c in cubes[:5]], "reasoning": "No LLM available; showing all tables."}
+
+    # Build a compact table catalog for the prompt
+    table_catalog = []
+    for cube in cubes:
+        fields_summary = ", ".join(
+            f"{f['name']}({f['type']})" for f in cube.get("fields", [])[:20]
+        )
+        table_catalog.append({
+            "ref": f"{cube['schema']}.{cube['table']}",
+            "name": cube.get("name", cube["table"]),
+            "description": cube.get("description", ""),
+            "fields": fields_summary,
+        })
+
+    input_data = json.dumps({"question": question, "tables": table_catalog}, default=str)
+
+    client_kwargs = {
+        "api_key": settings.openai_api_key.get_secret_value(),
+        "timeout": min(settings.llm_timeout_seconds, 30),
+        "max_retries": 1,
+    }
+    if settings.openai_base_url:
+        client_kwargs["base_url"] = settings.openai_base_url
+
+    try:
+        async with AsyncOpenAI(**client_kwargs) as client:
+            response = await client.responses.create(
+                model=settings.openai_model,
+                instructions=TABLE_SUGGEST_PROMPT,
+                input=input_data,
+                max_output_tokens=500,
+                store=False,
+            )
+        if response.status != "completed":
+            raise PlannerUnavailable("Table suggestion model response incomplete.")
+
+        text = "".join(
+            item.text for item in response.output
+            if hasattr(item, "text") and item.text
+        )
+        # Strip markdown code fences if present
+        text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+        result = json.loads(text)
+        # Validate: keep only refs that exist in the catalog
+        valid_refs = {t["ref"] for t in table_catalog}
+        result["table_refs"] = [r for r in result.get("table_refs", []) if r in valid_refs]
+        return result
+    except (OpenAIError, json.JSONDecodeError, KeyError) as error:
+        logger.warning("suggest_tables.failed", extra={"error": str(error)})
+        # Fall back to first few tables
+        return {"table_refs": [f"{c['schema']}.{c['table']}" for c in cubes[:3]], "reasoning": "Could not auto-select; showing first tables."}
+
+
 PROMPT = """You are the user's conversational PostgreSQL data analyst.
-Use the selected tables and prior conversation to understand follow-up questions.
+You have access to all tables in the active data source profile. When the user asks a question—whether general or specific—intelligently identify the relevant tables, inspect their schemas, and query them without requiring the user to manually select or add tables.
 Freely choose tools and repeat queries to inspect, sample, join and analyze source tables.
-Inspect source_schema before querying. Every physical table reference must be schema-qualified.
-Only the tables returned by source_schema are available for this turn. If a needed table
-is missing, ask the user to add it with the + button. Use joins, subqueries and non-recursive
-CTEs as appropriate. Verify join keys and cardinality; do not invent relationships.
+Inspect source_schema before querying to discover all tables, columns, and relationship paths in this source. Every physical table reference must be schema-qualified.
+Use joins, subqueries and non-recursive CTEs across any related tables as appropriate. Verify join keys and cardinality; do not invent relationships.
 Use each cube's grain, classification, approved measures, time dimensions, and declared
 relationship paths to frame business analysis. Joined fields are semantic paths, not physical
 column names: resolve source_alias/source_column through joins before writing SQL.
@@ -374,11 +445,14 @@ async def run_agent(
             "history_window": "Most recent 30 turns; query samples contain at most 5 rows.",
         }
         messages = [{"role": "user", "content": json.dumps(context, default=str)}]
-        async with AsyncOpenAI(
-            api_key=settings.openai_api_key.get_secret_value(),
-            timeout=settings.llm_timeout_seconds,
-            max_retries=1,
-        ) as client:
+        client_kwargs = {
+            "api_key": settings.openai_api_key.get_secret_value(),
+            "timeout": settings.llm_timeout_seconds,
+            "max_retries": 1,
+        }
+        if settings.openai_base_url:
+            client_kwargs["base_url"] = settings.openai_base_url
+        async with AsyncOpenAI(**client_kwargs) as client:
             calls_used = 0
             for turn in range(max_steps):
                 model_step = {
@@ -403,8 +477,12 @@ async def run_agent(
                 await publish(model_step)
                 if response.status != "completed":
                     return outcome("error", "The model response was incomplete. Please retry.")
-                messages.extend(response.output)
-                calls = [item for item in response.output if item.type == "function_call"]
+                for item in response.output:
+                    if getattr(item, "type", None) in {"function_call", "message"}:
+                        messages.append(item)
+                calls = [
+                    item for item in response.output if getattr(item, "type", None) == "function_call"
+                ]
                 if not calls:
                     messages.append(
                         {

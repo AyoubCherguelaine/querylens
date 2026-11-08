@@ -17,12 +17,16 @@ import { useT } from "@/lib/i18n/client";
 
 export function SourceDashboard({
   overview,
+  activeSourceId,
   onOpen,
+  onCloseSource,
   onComplete,
   onRefresh,
 }: {
   overview: SourceOverview;
+  activeSourceId?: string;
   onOpen: (id: string) => void;
+  onCloseSource?: () => void;
   onComplete: (source: Source) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
@@ -166,47 +170,75 @@ export function SourceDashboard({
         </section>
       ) : (
         <div className="source-grid">
-          {sources.map((source) => (
-            <article className="source-card" key={source.id}>
-              <div className="source-card-top">
-                <span className={`source-icon ${source.kind}`}>
-                  <Database size={23} />
-                </span>
-                <span className="tag">
-                  {source.kind === "existing"
-                    ? "PostgreSQL"
-                    : source.kind.toUpperCase()}
-                </span>
-              </div>
-              <h3>{source.name}</h3>
-              <code>{source.schema_name}</code>
-              <p
-                className="source-filename"
-                title={source.filename || source.schema_name}
+          {sources.map((source) => {
+            const isActive = source.id === activeSourceId;
+            return (
+              <article
+                className={`source-card ${isActive ? "active-profile-card" : ""}`}
+                key={source.id}
               >
-                {source.filename || t.connected}
-              </p>
-              <div className="source-metadata">
-                <span>
-                  <Table2 size={13} />
-                  {t.tables(source.table_count ?? 0)}
-                </span>
-                <span>
-                  {new Date(source.created_at).toLocaleDateString(intl)}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="plain"
-                className="source-open"
-                onClick={() => onOpen(source.id)}
-                disabled={busy}
-              >
-                {t.explore}
-                <ArrowRight size={16} />
-              </Button>
-            </article>
-          ))}
+                <div className="source-card-top">
+                  <span className={`source-icon ${source.kind}`}>
+                    <Database size={23} />
+                  </span>
+                  <div className="source-card-badges">
+                    {isActive && (
+                      <span className="profile-active-badge">
+                        <span className="profile-dot" />
+                        Active
+                      </span>
+                    )}
+                    <span className="tag">
+                      {source.kind === "existing"
+                        ? "PostgreSQL"
+                        : source.kind.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <h3>{source.name}</h3>
+                <code>{source.schema_name}</code>
+                <p
+                  className="source-filename"
+                  title={source.filename || source.schema_name}
+                >
+                  {source.filename || t.connected}
+                </p>
+                <div className="source-metadata">
+                  <span>
+                    <Table2 size={13} />
+                    {t.tables(source.table_count ?? 0)}
+                  </span>
+                  <span>
+                    {new Date(source.created_at).toLocaleDateString(intl)}
+                  </span>
+                </div>
+                <div className="source-card-footer">
+                  <Button
+                    variant="ghost"
+                    size="plain"
+                    className={`source-open ${isActive ? "active-btn" : ""}`}
+                    onClick={() => onOpen(source.id)}
+                    disabled={busy}
+                  >
+                    {isActive ? "Resume Profile" : "Open Profile"}
+                    <ArrowRight size={16} />
+                  </Button>
+                  {isActive && onCloseSource && (
+                    <Button
+                      variant="ghost"
+                      size="plain"
+                      className="source-close-profile-btn"
+                      onClick={onCloseSource}
+                      disabled={busy}
+                      title="Close active profile"
+                    >
+                      Close
+                    </Button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
       {!!overview.available_schemas.length && (

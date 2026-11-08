@@ -120,6 +120,19 @@ export type ModelsConfig = {
 
 export const DEFAULT_OPENAI_MODELS: ModelItem[] = [
   {
+    id: "openai.gpt-oss-120b",
+    provider: "openai",
+    name: "Bedrock Mantle GPT-OSS 120B",
+    description: "High performance 120B model via AWS Bedrock Mantle",
+    credit_cost: 5,
+    pricing: {
+      input_per_million: 0.15,
+      output_per_million: 0.6,
+      cached_input_per_million: 0.075,
+    },
+    is_default: true,
+  },
+  {
     id: "gpt-4o-mini",
     provider: "openai",
     name: "OpenAI GPT-4o-mini",
@@ -130,7 +143,7 @@ export const DEFAULT_OPENAI_MODELS: ModelItem[] = [
       output_per_million: 0.6,
       cached_input_per_million: 0.075,
     },
-    is_default: true,
+    is_default: false,
   },
   {
     id: "gpt-6-luna",
@@ -465,4 +478,14 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
       typeof data.detail === "string" ? data.detail : errors().importFailed,
     );
   return data;
+}
+
+export async function suggestTables(
+  question: string,
+  source_id: string,
+): Promise<{ cube_ids: string[]; reasoning: string }> {
+  return api<{ cube_ids: string[]; reasoning: string }>(
+    "cubes/suggest-tables",
+    { question, source_id },
+  );
 }

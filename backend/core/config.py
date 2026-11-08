@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr = Field(min_length=32)
     token_minutes: int = Field(default=120, ge=5, le=1440)
     openai_api_key: SecretStr = SecretStr("")
+    openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
     models_config_path: str = "models.json"
     llm_timeout_seconds: int = Field(default=40, ge=1, le=120)

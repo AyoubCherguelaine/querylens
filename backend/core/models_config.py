@@ -57,6 +57,19 @@ def load_models_config(config_path: str | Path | None = None, reload: bool = Fal
             description="Default OpenAI models configuration",
             models=[
                 ModelItem(
+                    id="openai.gpt-oss-120b",
+                    provider="openai",
+                    name="Bedrock Mantle GPT-OSS 120B",
+                    description="High performance 120B model via AWS Bedrock Mantle",
+                    credit_cost=5,
+                    pricing=ModelPricing(
+                        input_per_million=0.15,
+                        output_per_million=0.6,
+                        cached_input_per_million=0.075,
+                    ),
+                    is_default=False,
+                ),
+                ModelItem(
                     id="gpt-4o-mini",
                     provider="openai",
                     name="OpenAI GPT-4o-mini",

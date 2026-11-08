@@ -3,6 +3,19 @@
   "description": "Configured LLM providers and models allowed in QueryLens with credit consumption rates and token pricing.",
   "models": [
     {
+      "id": "openai.gpt-oss-120b",
+      "provider": "openai",
+      "name": "Bedrock Mantle GPT-OSS 120B",
+      "description": "High performance 120B model via AWS Bedrock Mantle",
+      "credit_cost": 5,
+      "pricing": {
+        "input_per_million": 0.15,
+        "output_per_million": 0.6,
+        "cached_input_per_million": 0.075
+      },
+      "is_default": false
+    },
+    {
       "id": "gpt-4o-mini",
       "provider": "openai",
       "name": "OpenAI GPT-4o-mini",

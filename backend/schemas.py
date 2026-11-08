@@ -74,3 +74,8 @@ class ModelSettings(StrictModel):
 class CreditRecharge(StrictModel):
     amount: int = Field(default=50, ge=5, le=1000)
 
+
+class TableSuggest(StrictModel):
+    question: str = Field(min_length=1, max_length=2000)
+    source_id: UUID
+

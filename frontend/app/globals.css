@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=DM+Sans:wght@400;450;500;550;600;650;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap");
 :root {
   --bg: #f8f9fa;
   --surface: #ffffff;
@@ -8,6 +8,7 @@
   --accent: #20a7c9;
   --soft: #e8f7fa;
   --green: #36b37e;
+  --font-arabic: "IBM Plex Sans Arabic", "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Tahoma", sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -579,38 +580,72 @@ p {
   color: #5d6c81;
 }
 .suggestions {
-  display: flex;
-  justify-content: center;
-  gap: 13px;
-  margin: 25px auto 10px;
-  max-width: 600px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin: 24px auto 10px;
+  max-width: 820px;
+  width: 100%;
 }
 .suggestions button {
   display: flex;
-  align-items: center;
-  gap: 11px;
+  align-items: flex-start;
+  gap: 12px;
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 13px;
+  border-radius: 10px;
+  padding: 13px 14px;
   text-align: start;
-  flex: 1;
+  min-width: 0;
+  height: auto !important;
+  min-height: 74px;
+  white-space: normal !important;
+  flex-shrink: 1 !important;
   color: #7e8eb3;
   font-size: 11px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 .suggestions button:hover {
   border-color: #bce9f2;
   background: #f7fcfe;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(32, 167, 201, 0.1);
+}
+.suggestions button > svg {
+  flex: none;
+  margin-top: 2px;
+  color: #7d89a0;
+}
+.suggestions button:hover > svg {
+  color: var(--accent);
 }
 .suggestions span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: start;
   flex: 1;
+  min-width: 0;
   color: #46546a;
+  white-space: normal;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .suggestions small {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--muted);
   margin-top: 4px;
+  white-space: normal;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .composer-wrap {
   padding: 16px 22px 9px;
@@ -1682,28 +1717,100 @@ pre {
     inset-inline-end: 20px;
   }
 }
-/* Arabic: Arabic-capable fonts, no tracking (it breaks cursive joining), mirrored directional icons. */
+/* ==========================================================================
+   ARABIC TYPOGRAPHY & RTL CORE ENHANCEMENTS
+   ========================================================================== */
+:lang(ar),
 :lang(ar) body,
+:lang(ar) button,
+:lang(ar) input,
+:lang(ar) textarea,
+:lang(ar) select,
+:lang(ar) optgroup,
 :lang(ar) h1,
 :lang(ar) h2,
-:lang(ar) h3 {
-  font-family: "IBM Plex Sans Arabic", "DM Sans", sans-serif;
+:lang(ar) h3,
+:lang(ar) h4,
+:lang(ar) h5,
+:lang(ar) h6,
+[dir="rtl"],
+[dir="rtl"] body,
+[dir="rtl"] button,
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select,
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6 {
+  font-family: var(--font-arabic);
 }
-:lang(ar) * {
+
+/* Arabic line height & legibility: Arabic characters are taller with Tashkeel/diacritics */
+:lang(ar) body,
+[dir="rtl"] body {
+  line-height: 1.65;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:lang(ar) h1,
+:lang(ar) h2,
+:lang(ar) h3,
+:lang(ar) h4,
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4 {
+  font-family: var(--font-arabic);
+  line-height: 1.4;
+}
+
+/* Arabic script MUST NEVER have letter-spacing (tracking breaks cursive ligature connections) */
+:lang(ar) *,
+[dir="rtl"] * {
   letter-spacing: 0 !important;
 }
+
+/* Word wrapping & hyphenation for Arabic */
+:lang(ar),
+[dir="rtl"] {
+  hyphens: manual;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* Mirrored Directional Icons */
 [dir="rtl"] .lucide-arrow-right,
 [dir="rtl"] .lucide-arrow-left,
 [dir="rtl"] .lucide-arrow-up-right,
-[dir="rtl"] .lucide-chevron-right {
+[dir="rtl"] .lucide-chevron-right,
+[dir="rtl"] .lucide-chevron-left {
   transform: scaleX(-1);
 }
+
+/* LTR isolation for code, emails, passwords, metrics, and SQL */
 [dir="rtl"] pre,
 [dir="rtl"] code,
+[dir="rtl"] kbd,
+[dir="rtl"] samp,
+[dir="rtl"] .font-mono,
 [dir="rtl"] input[type="email"],
-[dir="rtl"] input[type="password"] {
+[dir="rtl"] input[type="password"],
+[dir="rtl"] input[type="url"],
+[dir="rtl"] input[type="tel"] {
   direction: ltr;
   text-align: start;
+  unicode-bidi: isolate;
+}
+
+/* Technical IDs and names in RTL */
+[dir="rtl"] .brand-mark,
+[dir="rtl"] .source-profile-filename,
+[dir="rtl"] .profile-name {
   unicode-bidi: isolate;
 }
 @media (max-width: 1280px) {

@@ -20,11 +20,14 @@ async def make_plan(cube, question, settings):
             "Configure OPENAI_API_KEY to use natural-language analysis; the plan API works without it."
         )
     try:
-        async with AsyncOpenAI(
-            api_key=settings.openai_api_key.get_secret_value(),
-            timeout=settings.llm_timeout_seconds,
-            max_retries=1,
-        ) as client:
+        client_kwargs = {
+            "api_key": settings.openai_api_key.get_secret_value(),
+            "timeout": settings.llm_timeout_seconds,
+            "max_retries": 1,
+        }
+        if settings.openai_base_url:
+            client_kwargs["base_url"] = settings.openai_base_url
+        async with AsyncOpenAI(**client_kwargs) as client:
             response = await client.responses.parse(
                 model=settings.openai_model,
                 instructions=PLAN_PROMPT,

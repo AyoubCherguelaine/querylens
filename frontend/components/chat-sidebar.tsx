@@ -11,6 +11,7 @@ import {
   MessageSquare,
   LogOut,
   Settings as SettingsIcon,
+  FolderOpen,
 } from "lucide-react";
 import type { Cube, Session, Source } from "@/lib/api";
 import { LanguageSwitch, useT } from "@/lib/i18n/client";
@@ -28,9 +29,11 @@ export function ChatSidebar({
   onOpenSession,
   onSignOut,
   onOpenSettings,
+  onCloseSource,
+  onSwitchSource,
 }: {
   leftOpen: boolean;
-  rightOpen: boolean;
+  rightOpen?: boolean;
   busy: boolean;
   cubes: Cube[];
   sessions: Session[];
@@ -41,6 +44,8 @@ export function ChatSidebar({
   onOpenSession: (session: Session) => void;
   onSignOut: () => void;
   onOpenSettings?: () => void;
+  onCloseSource?: () => void;
+  onSwitchSource?: () => void;
 }) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.chats;
@@ -70,7 +75,11 @@ export function ChatSidebar({
       year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
     });
   }
-  const sourceKind = activeSource ? t.sourceKind(activeSource.kind) : "";
+  const sourceKind = activeSource
+    ? activeSource.kind === "existing"
+      ? "PostgreSQL"
+      : activeSource.kind.toUpperCase()
+    : "";
   const filtered = sessions.filter((item) =>
     sessionName(item).toLowerCase().includes(chatSearch.toLowerCase()),
   );
@@ -100,11 +109,58 @@ export function ChatSidebar({
           <X size={18} />
         </Button>
       </div>
+
+      {/* Source Profile Card */}
+      {activeSource ? (
+        <div className="sidebar-profile-card">
+          <div className="sidebar-profile-icon">
+            <Database size={18} />
+          </div>
+          <div className="sidebar-profile-info">
+            <span className="sidebar-profile-name" title={activeSource.schema_name}>
+              {activeSource.schema_name}
+            </span>
+            <span className="sidebar-profile-kind">{sourceKind}</span>
+          </div>
+          <div className="sidebar-profile-actions">
+            {onSwitchSource && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="icon-button"
+                title="Switch source"
+                onClick={onSwitchSource}
+                disabled={busy}
+              >
+                <FolderOpen size={14} />
+              </Button>
+            )}
+            {onCloseSource && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="icon-button"
+                title="Close source"
+                onClick={onCloseSource}
+                disabled={busy}
+              >
+                <X size={14} />
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="sidebar-no-profile">
+          <span className="dot dot-idle" />
+          <span>{t.source}</span>
+        </div>
+      )}
+
       <Button
         variant="ghost"
         size="plain"
         className="primary new-chat"
-        disabled={busy}
+        disabled={busy || !activeSource}
         onClick={() => onNewChat()}
       >
         <Plus size={17} /> {t.newChat}
@@ -160,15 +216,6 @@ export function ChatSidebar({
         )}
       </div>
       <div className="sidebar-bottom">
-        <div className="sidebar-source-row">
-          <span className="source-info">
-            <span className="dot" />
-            <span className="source-name" title={activeSource?.schema_name || t.source}>
-              {activeSource?.schema_name || t.source}
-            </span>
-          </span>
-          {!!sourceKind && <span className="source-kind">{sourceKind}</span>}
-        </div>
         <div className="sidebar-actions-row">
           <LanguageSwitch />
           <div className="sidebar-action-buttons">
@@ -202,3 +249,4 @@ export function ChatSidebar({
     </aside>
   );
 }
+
