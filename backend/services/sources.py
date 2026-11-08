@@ -32,7 +32,7 @@ async def available_definitions(request):
         reserved = {
             row["schema_name"]
             for row in await connection.fetch(
-                "SELECT schema_name FROM chat_olap.sources WHERE kind IN ('csv','sqlite')"
+                "SELECT schema_name FROM chat_olap.sources WHERE kind != 'existing'"
             )
         }
     return [d for d in definitions if d["schema"] not in reserved]
@@ -110,7 +110,7 @@ async def import_dataset(
             # Serialize schema allocation to prevent simultaneous uploads choosing the same name.
             await connection.execute("SELECT pg_advisory_xact_lock(73012892)")
             count = await connection.fetchval(
-                "SELECT count(*) FROM chat_olap.sources WHERE owner_id=$1 AND kind IN ('csv','sqlite')",
+                "SELECT count(*) FROM chat_olap.sources WHERE owner_id=$1 AND kind != 'existing'",
                 user_id,
             )
             if count >= settings.max_imported_sources:

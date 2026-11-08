@@ -1,9 +1,11 @@
 import asyncio
+import io
 import os
 import sqlite3
 from pathlib import Path
 
 import asyncpg
+import openpyxl
 import pytest
 
 from backend.core.config import Settings
@@ -530,3 +532,152 @@ def test_multitable_chat_persistence_join_and_ownership(client, tmp_path, monkey
     assert cross_result.status_code == 200, cross_result.text
     assert cross_result.json()["rows"] == [{"id": 1, "label": "A"}, {"id": 2, "label": "B"}]
     assert cross_result.json()["cube_ids"] == cross_selected
+
+
+def make_excel(sheets: dict[str, list[list]]) -> bytes:
+    wb = openpyxl.Workbook()
+    first = True
+    for name, rows in sheets.items():
+        ws = wb.active if first else wb.create_sheet(name)
+        first = False
+        ws.title = name
+        for row in rows:
+            ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_excel_parser_multiple_sheets_and_types():
+    from datetime import date, datetime
+
+    data = make_excel(
+        {
+            "Customers": [
+                ["Customer ID", "Full Name", "Active", "Joined On"],
+                [1, "Alice", True, date(2026, 1, 1)],
+                [2, "Bob", False, date(2026, 2, 1)],
+            ],
+            "Orders": [
+                ["Order ID", "Total Amount", "Created At"],
+                [101, 49.99, datetime(2026, 1, 10, 15, 30)],
+                [102, 120.50, datetime(2026, 1, 11, 16, 45)],
+            ],
+            "EmptySheet": [
+                [None, None],
+                [None, None],
+            ],
+        }
+    )
+    parsed = parse_file(data, "Company Sales.xlsx", settings())
+    assert parsed.kind == "excel"
+    assert parsed.schema_name == "company_sales"
+    assert len(parsed.tables) == 2
+    customers = parsed.tables[0]
+    orders = parsed.tables[1]
+    assert customers.original_name == "Customers"
+    assert customers.name == "customers"
+    assert [c["type"] for c in customers.columns] == ["int8", "text", "bool", "date"]
+    assert orders.original_name == "Orders"
+    assert orders.name == "orders"
+    assert [c["type"] for c in orders.columns] == ["int8", "numeric", "timestamptz"]
+
+
+def test_excel_empty_rows_and_trailing_columns():
+    data = make_excel(
+        {
+            "Data": [
+                [None, None, None],
+                ["Code", "Value", None, None],
+                ["A1", 100, None, ""],
+                [None, None, None, None],
+                ["A2", 200, "", None],
+            ]
+        }
+    )
+    parsed = parse_file(data, "Tricky.xlsx", settings())
+    assert len(parsed.tables) == 1
+    table = parsed.tables[0]
+    assert [c["name"] for c in table.columns] == ["code", "value"]
+    assert len(table.rows) == 2
+    assert table.rows[0] == ("A1", 100)
+    assert table.rows[1] == ("A2", 200)
+
+
+def test_excel_invalid_and_collisions():
+    empty_wb = make_excel({"Sheet1": [[None, None]], "Sheet2": []})
+    with pytest.raises(ImportInvalid, match="no sheets with valid data"):
+        parse_file(empty_wb, "empty.xlsx", settings())
+
+    bad_header = make_excel({"Sheet1": [["A", None, "C"], [1, 2, 3]]})
+    with pytest.raises(ImportInvalid, match="non-empty header"):
+        parse_file(bad_header, "bad_header.xlsx", settings())
+
+    collision = make_excel({"My Sheet": [["a"], [1]], "My_Sheet": [["b"], [2]]})
+    with pytest.raises(ImportInvalid, match="sheet names collide"):
+        parse_file(collision, "collision.xlsx", settings())
+
+    with pytest.raises(ImportInvalid, match="not a valid Excel spreadsheet"):
+        parse_file(b"PK\x03\x04corrupt_zip_content", "corrupt.xlsx", settings())
+
+
+def test_import_excel_api_multisheet_and_selection(client):
+    headers = account(client, "excel_tester@example.com")
+    data = make_excel(
+        {
+            "Customers": [
+                ["ID", "Name"],
+                [1, "Alice"],
+                [2, "Bob"],
+            ],
+            "Orders": [
+                ["ID", "Customer ID", "Amount"],
+                [10, 1, 100.50],
+                [20, 2, 200.75],
+            ],
+        }
+    )
+    resp = preview(client, headers, data, name="Retail Store.xlsx")
+    assert resp.status_code == 200, resp.text
+    preview_data = resp.json()
+    assert preview_data["kind"] == "excel"
+    assert len(preview_data["tables"]) == 2
+    table_names = {t["original_name"] for t in preview_data["tables"]}
+    assert table_names == {"Customers", "Orders"}
+
+    # Selective import (only Customers)
+    imported = upload(client, headers, data, name="Retail Store.xlsx", tables='["Customers"]')
+    assert imported.status_code == 201, imported.text
+    source = imported.json()
+    assert source["kind"] == "excel"
+    detail = client.get("/sources/" + source["id"], headers=headers).json()
+    assert len(detail["cubes"]) == 1
+    assert detail["cubes"][0]["definition"]["table"] == "customers"
+
+
+def test_import_excel_api_all_sheets_and_data_verification(client):
+    headers = account(client, "excel_all_tester@example.com")
+    data = make_excel(
+        {
+            "Customers": [
+                ["ID", "Name"],
+                [1, "Alice"],
+                [2, "Bob"],
+            ],
+            "Orders": [
+                ["ID", "Customer ID", "Amount"],
+                [10, 1, 100.50],
+                [20, 2, 200.75],
+            ],
+        }
+    )
+    imported = upload(client, headers, data, name="All Sales.xlsx")
+    assert imported.status_code == 201, imported.text
+    source = imported.json()
+    assert source["kind"] == "excel"
+    detail = client.get("/sources/" + source["id"], headers=headers).json()
+    assert len(detail["cubes"]) == 2
+    tables = {c["definition"]["table"] for c in detail["cubes"]}
+    assert tables == {"customers", "orders"}
+
+

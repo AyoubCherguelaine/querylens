@@ -310,7 +310,16 @@ const en = {
     today: "Today",
     yesterday: "Yesterday",
     source: "Data source",
-    sourceKind: (kind: string) => kind,
+    sourceKind: (kind: string) =>
+      kind === "existing"
+        ? "PostgreSQL"
+        : kind === "csv"
+          ? "CSV"
+          : kind === "sqlite"
+            ? "SQLite"
+            : kind === "excel"
+              ? "Excel"
+              : kind.toUpperCase(),
     signOut: "Sign out",
   },
   schema: {
@@ -426,8 +435,8 @@ const en = {
     importing: "Importing into PostgreSQL…",
     choose: "Choose a file or drop it here",
     limits: (mb: number, rows: string) =>
-      `CSV or SQLite · up to ${mb} MB · ${rows} rows total`,
-    hint: "CSV needs a header row. SQLite supports multiple ordinary tables.",
+      `CSV, Excel or SQLite · up to ${mb} MB · ${rows} rows total`,
+    hint: "CSV needs a header row. Excel imports each sheet as a table. SQLite supports multiple ordinary tables.",
     schemaName: "Schema name",
     tableName: "Table name",
     schemaHelp:
@@ -444,6 +453,8 @@ const en = {
     primaryKeyFallback: "primary key",
     sqliteNote:
       "Select referenced tables together. Constraint failures roll back the whole import.",
+    excelNote:
+      "Each sheet in the Excel file is imported as an individual table.",
     previewOnly: "Preview only. Nothing has been saved yet.",
     importingShort: "Importing…",
     importTables: (count: number) =>
@@ -927,7 +938,9 @@ const ar: Dictionary = {
           ? "CSV"
           : kind === "sqlite"
             ? "SQLite"
-            : kind.toUpperCase(),
+            : kind === "excel"
+              ? "Excel"
+              : kind.toUpperCase(),
     signOut: "تسجيل الخروج",
   },
   schema: {
@@ -1056,8 +1069,8 @@ const ar: Dictionary = {
     importing: "جارٍ الاستيراد إلى PostgreSQL…",
     choose: "اختر ملفًا أو أفلته هنا",
     limits: (mb: number, rows: string) =>
-      `CSV أو SQLite · حتى ${mb} ميغابايت · ${rows} صف كحد أقصى`,
-    hint: "يحتاج ملف CSV إلى صف عناوين. يدعم SQLite عدة جداول عادية.",
+      `CSV أو Excel أو SQLite · حتى ${mb} ميغابايت · ${rows} صف كحد أقصى`,
+    hint: "يحتاج CSV إلى صف عناوين. يستورد Excel كل ورقة كجدول. ويدعم SQLite عدة جداول عادية.",
     schemaName: "اسم المخطط",
     tableName: "اسم الجدول",
     schemaHelp:
@@ -1080,6 +1093,8 @@ const ar: Dictionary = {
     primaryKeyFallback: "المفتاح الأساسي",
     sqliteNote:
       "حدّد الجداول المرجعية معًا. أي إخفاق في القيود يتراجع عن عملية الاستيراد بأكملها.",
+    excelNote:
+      "يتم استيراد كل ورقة في ملف Excel كجدول مستقل.",
     previewOnly: "معاينة فقط. لم يُحفظ أي شيء بعد.",
     importingShort: "جارٍ الاستيراد…",
     importTables: (count: number) =>

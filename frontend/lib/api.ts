@@ -443,7 +443,7 @@ export type ImportTable = {
 };
 export type ImportPreview = {
   filename: string;
-  kind: "csv" | "sqlite";
+  kind: "csv" | "sqlite" | "excel";
   suggested_schema: string;
   tables: ImportTable[];
   sha256: string;
@@ -453,7 +453,7 @@ export type Source = {
   id: string;
   name: string;
   schema_name: string;
-  kind: "csv" | "sqlite" | "existing";
+  kind: "csv" | "sqlite" | "excel" | "existing";
   filename: string | null;
   created_at: string;
   table_count?: number;

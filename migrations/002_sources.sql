@@ -3,14 +3,14 @@ CREATE TABLE IF NOT EXISTS chat_olap.sources (
     owner_id uuid NOT NULL REFERENCES chat_olap.users(id) ON DELETE CASCADE,
     name text NOT NULL,
     schema_name text NOT NULL,
-    kind text NOT NULL CHECK (kind IN ('csv', 'sqlite', 'existing')),
+    kind text NOT NULL CHECK (kind IN ('csv', 'sqlite', 'excel', 'existing')),
     filename text,
     file_sha256 text,
     manifest jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE(owner_id, schema_name)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS sources_imported_schema_idx ON chat_olap.sources(schema_name) WHERE kind IN ('csv','sqlite');
+CREATE UNIQUE INDEX IF NOT EXISTS sources_imported_schema_idx ON chat_olap.sources(schema_name) WHERE kind IN ('csv','sqlite','excel');
 CREATE INDEX IF NOT EXISTS sources_owner_idx ON chat_olap.sources(owner_id);
 ALTER TABLE chat_olap.cubes ADD COLUMN IF NOT EXISTS source_id uuid REFERENCES chat_olap.sources(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS cubes_source_idx ON chat_olap.cubes(source_id);

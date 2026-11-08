@@ -8,10 +8,15 @@ import sqlite3
 import tempfile
 import time
 import unicodedata
+import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+
+import openpyxl
+import xlrd
+from openpyxl.utils.exceptions import InvalidFileException
 
 from backend.services.analysis import encode_value
 from backend.services.compiler import quote
@@ -355,6 +360,162 @@ def parse_sqlite(data, settings):
             connection.close()
 
 
+def parse_excel(data: bytes, filename: str, settings):
+    suffix = Path(filename).suffix.lower()
+
+    def read_xlsx_sheets(content: bytes):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+        except (zipfile.BadZipFile, InvalidFileException, Exception) as error:
+            raise ImportInvalid("This file is not a valid Excel spreadsheet.") from error
+        sheets = []
+        try:
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                rows = [list(r) for r in ws.iter_rows(values_only=True)]
+                sheets.append((sheet_name, rows))
+        except Exception as error:
+            raise ImportInvalid("This file is not a valid Excel spreadsheet.") from error
+        finally:
+            wb.close()
+        return sheets
+
+    def read_xls_sheets(content: bytes):
+        try:
+            book = xlrd.open_workbook(file_contents=content)
+        except Exception as error:
+            raise ImportInvalid("This file is not a valid Excel spreadsheet.") from error
+        sheets = []
+        try:
+            for sheet_name in book.sheet_names():
+                sheet = book.sheet_by_name(sheet_name)
+                rows = []
+                for r in range(sheet.nrows):
+                    row_vals = []
+                    for c in range(sheet.ncols):
+                        cell = sheet.cell(r, c)
+                        if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                            row_vals.append(None)
+                        elif cell.ctype == xlrd.XL_CELL_TEXT:
+                            row_vals.append(cell.value)
+                        elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                            row_vals.append(int(cell.value) if cell.value.is_integer() else cell.value)
+                        elif cell.ctype == xlrd.XL_CELL_DATE:
+                            try:
+                                row_vals.append(xlrd.xldate_as_datetime(cell.value, book.datemode))
+                            except Exception:
+                                row_vals.append(None)
+                        elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+                            row_vals.append(bool(cell.value))
+                        elif cell.ctype == xlrd.XL_CELL_ERROR:
+                            row_vals.append(None)
+                        else:
+                            row_vals.append(cell.value)
+                    rows.append(row_vals)
+                sheets.append((sheet_name, rows))
+        except Exception as error:
+            raise ImportInvalid("This file is not a valid Excel spreadsheet.") from error
+        return sheets
+
+    if data.startswith(b"PK\x03\x04") or suffix in {".xlsx", ".xlsm"}:
+        try:
+            sheets = read_xlsx_sheets(data)
+        except ImportInvalid:
+            if suffix == ".xls" or data.startswith(b"\xd0\xcf\x11\xe0"):
+                sheets = read_xls_sheets(data)
+            else:
+                raise
+    elif data.startswith(b"\xd0\xcf\x11\xe0") or suffix == ".xls":
+        try:
+            sheets = read_xls_sheets(data)
+        except ImportInvalid:
+            if data.startswith(b"PK\x03\x04"):
+                sheets = read_xlsx_sheets(data)
+            else:
+                raise
+    else:
+        raise ImportInvalid("This file is not a valid Excel spreadsheet.")
+
+    def is_blank_cell(v):
+        return v is None or (isinstance(v, str) and not v.strip())
+
+    def is_blank_row(row):
+        return all(is_blank_cell(c) for c in row)
+
+    tables, total_rows = [], 0
+    for sheet_name, raw_rows in sheets:
+        iterator = iter(raw_rows)
+        header_row = None
+        for r in iterator:
+            if not is_blank_row(r):
+                header_row = list(r)
+                break
+        if header_row is None:
+            continue
+
+        while header_row and is_blank_cell(header_row[-1]):
+            header_row.pop()
+        if not header_row:
+            continue
+
+        headers = []
+        for h in header_row:
+            if is_blank_cell(h):
+                raise ImportInvalid(f"Sheet '{sheet_name}' requires a non-empty header for every column.")
+            headers.append(str(h).strip())
+
+        if len(headers) > settings.import_max_columns:
+            raise ImportInvalid(f"At most {settings.import_max_columns} columns are supported per table.")
+
+        num_cols = len(headers)
+        sheet_rows = []
+        for r in iterator:
+            row_slice = (
+                list(r[:num_cols]) if len(r) >= num_cols else list(r) + [None] * (num_cols - len(r))
+            )
+            if is_blank_row(row_slice):
+                continue
+            sheet_rows.append([None if is_blank_cell(c) else c for c in row_slice])
+            if total_rows + len(sheet_rows) > settings.import_max_rows:
+                raise ImportInvalid(f"Import exceeds the {settings.import_max_rows} total row limit.")
+
+        if sheet_rows:
+            for c_idx in range(num_cols):
+                present = [row[c_idx] for row in sheet_rows if row[c_idx] is not None]
+                if present and all(isinstance(v, (datetime, date)) for v in present):
+                    if all(
+                        isinstance(v, date) and not isinstance(v, datetime)
+                        or (
+                            isinstance(v, datetime)
+                            and v.hour == 0
+                            and v.minute == 0
+                            and v.second == 0
+                            and v.microsecond == 0
+                        )
+                        for v in present
+                    ):
+                        for row in sheet_rows:
+                            if isinstance(row[c_idx], datetime):
+                                row[c_idx] = row[c_idx].date()
+
+        row_tuples = [tuple(r) for r in sheet_rows]
+        table = typed_table(sheet_name, headers, row_tuples)
+        tables.append(table)
+        total_rows += len(row_tuples)
+
+    if not tables:
+        raise ImportInvalid("Excel workbook contains no sheets with valid data.")
+    if len(tables) > settings.import_max_tables:
+        raise ImportInvalid(f"At most {settings.import_max_tables} tables are supported.")
+    if len({t.name for t in tables}) != len(tables):
+        raise ImportInvalid("Excel sheet names collide after normalization. Rename them first.")
+
+    return tables, [
+        "Each sheet is imported as an individual table. Types are inferred from all rows in the sheet.",
+        "Formulas are evaluated using their cached calculation values. Empty cells become NULL.",
+    ]
+
+
 def parse_file(data: bytes, filename: str, settings) -> ParsedImport:
     filename = filename.replace("\\", "/").split("/")[-1][:200]
     suffix = Path(filename).suffix.lower()
@@ -368,8 +529,11 @@ def parse_file(data: bytes, filename: str, settings) -> ParsedImport:
     elif suffix in {".db", ".sqlite", ".sqlite3"}:
         tables, warnings = parse_sqlite(data, settings)
         kind = "sqlite"
+    elif suffix in {".xlsx", ".xls", ".xlsm"}:
+        tables, warnings = parse_excel(data, filename, settings)
+        kind = "excel"
     else:
-        raise ImportInvalid("Upload a .csv, .db, .sqlite or .sqlite3 file.")
+        raise ImportInvalid("Upload a .csv, .db, .sqlite, .sqlite3, .xlsx, or .xls file.")
     return ParsedImport(
         filename,
         kind,

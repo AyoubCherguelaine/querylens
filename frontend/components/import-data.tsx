@@ -101,7 +101,7 @@ export function ImportData({
         className="sr-only"
         id="source-file"
         type="file"
-        accept=".csv,.db,.sqlite,.sqlite3"
+        accept=".csv,.db,.sqlite,.sqlite3,.xlsx,.xls,.xlsm"
         disabled={busy}
         onChange={(e) => {
           const candidate = e.target.files?.[0];
@@ -293,6 +293,7 @@ export function ImportData({
               <p key={w}>{w}</p>
             ))}
             {preview.kind === "sqlite" && <p>{t.sqliteNote}</p>}
+            {preview.kind === "excel" && <p>{t.excelNote}</p>}
           </div>
           <div className="import-actions">
             <span>

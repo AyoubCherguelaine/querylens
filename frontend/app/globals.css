@@ -1182,6 +1182,10 @@ pre {
   background: #f3effc;
   color: #8a73bd;
 }
+.source-icon.excel {
+  background: #edf7ed;
+  color: #2e7d32;
+}
 .source-card h3 {
   font-size: 17px;
   margin: 20px 0 8px;
