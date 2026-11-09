@@ -320,16 +320,33 @@ def model_schema(tables, constraints):
         business_measure = next(
             (m for m in cube["measures"] if m["aggregation"] == "sum"), cube["measures"][0]
         )
-        cube["suggested_questions"] = []
+        questions = []
         if cube["time_dimensions"]:
-            cube["suggested_questions"].append(
+            questions.append(
                 f"Show {business_measure['label']} by month using {cube['time_dimensions'][0]}."
             )
-        descriptive = [f["name"] for f in cube["fields"] if f["role"] == "dimension"]
+        descriptive = [f["name"] for f in cube["fields"] if f.get("role") == "dimension"]
         if descriptive:
-            cube["suggested_questions"].append(
+            questions.append(
                 f"Compare {business_measure['label']} by {descriptive[0]}."
             )
+            questions.append(
+                f"What are the top 5 {descriptive[0]} by total {business_measure['label']}?"
+            )
+        if len(descriptive) > 1:
+            questions.append(
+                f"Break down {business_measure['label']} by {descriptive[0]} and {descriptive[1]}."
+            )
+        if cube.get("joins"):
+            target_table = cube["joins"][0].get("table")
+            questions.append(
+                f"Analyze {business_measure['label']} across related {target_table} records."
+            )
+        if len(questions) < 3:
+            questions.append(
+                f"Summarize overall {business_measure['label']} and record distribution."
+            )
+        cube["suggested_questions"] = questions[:5]
         cube["warnings"] = list(dict.fromkeys(cube["warnings"]))
         cubes.append(cube)
     return cubes

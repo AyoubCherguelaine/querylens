@@ -9,7 +9,15 @@ from fastapi.responses import StreamingResponse
 
 from backend.api.dependencies import cube_pool, current_user, owned_cube
 from backend.core.models_config import get_model_credit_cost
-from backend.schemas import Analysis, Question, SessionCreate, SessionTables, TableSuggest
+from backend.schemas import (
+    Analysis,
+    DashboardCardCreate,
+    DashboardCardUpdate,
+    Question,
+    SessionCreate,
+    SessionTables,
+    TableSuggest,
+)
 from backend.services.analysis import execute_plan
 from backend.services.chat_agent import run_agent, suggest_tables
 from backend.services.chat_scope import resolve_cubes, save_tables, table_ids
@@ -319,3 +327,124 @@ async def profile(cube_id: UUID, request: Request, user=Depends(current_user)):
         raise HTTPException(
             422, "Cannot profile this source. Check permissions and rediscover cubes."
         )
+
+
+@router.get("/dashboards/cards")
+async def get_dashboard_cards(request: Request, user=Depends(current_user)):
+    async with request.app.state.db.acquire() as connection:
+        rows = await connection.fetch(
+            """
+            SELECT id, title, card_type, content, query_text, source_id, cube_id, session_id, layout_order, created_at
+            FROM chat_olap.dashboard_cards
+            WHERE owner_id = $1
+            ORDER BY layout_order ASC, created_at DESC
+            """,
+            user["id"],
+        )
+    return [
+        {
+            "id": str(r["id"]),
+            "title": r["title"],
+            "card_type": r["card_type"],
+            "content": r["content"],
+            "query_text": r["query_text"],
+            "source_id": str(r["source_id"]) if r["source_id"] else None,
+            "cube_id": str(r["cube_id"]) if r["cube_id"] else None,
+            "session_id": str(r["session_id"]) if r["session_id"] else None,
+            "layout_order": r["layout_order"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/dashboards/cards", status_code=201)
+async def create_dashboard_card(
+    body: DashboardCardCreate, request: Request, user=Depends(current_user)
+):
+    card_id = uuid4()
+    async with request.app.state.db.acquire() as connection:
+        row = await connection.fetchrow(
+            """
+            INSERT INTO chat_olap.dashboard_cards(
+                id, owner_id, title, card_type, content, query_text, source_id, cube_id, session_id, layout_order
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id, title, card_type, content, query_text, source_id, cube_id, session_id, layout_order, created_at
+            """,
+            card_id,
+            user["id"],
+            body.title,
+            body.card_type,
+            body.content,
+            body.query_text,
+            body.source_id,
+            body.cube_id,
+            body.session_id,
+            body.layout_order,
+        )
+    return {
+        "id": str(row["id"]),
+        "title": row["title"],
+        "card_type": row["card_type"],
+        "content": row["content"],
+        "query_text": row["query_text"],
+        "source_id": str(row["source_id"]) if row["source_id"] else None,
+        "cube_id": str(row["cube_id"]) if row["cube_id"] else None,
+        "session_id": str(row["session_id"]) if row["session_id"] else None,
+        "layout_order": row["layout_order"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+
+@router.delete("/dashboards/cards/{card_id}")
+async def delete_dashboard_card(card_id: UUID, request: Request, user=Depends(current_user)):
+    async with request.app.state.db.acquire() as connection:
+        deleted = await connection.execute(
+            "DELETE FROM chat_olap.dashboard_cards WHERE id = $1 AND owner_id = $2",
+            card_id,
+            user["id"],
+        )
+    if deleted == "DELETE 0":
+        raise HTTPException(404, "Dashboard card not found.")
+    return {"status": "deleted", "id": str(card_id)}
+
+
+@router.patch("/dashboards/cards/{card_id}")
+async def update_dashboard_card(
+    card_id: UUID, body: DashboardCardUpdate, request: Request, user=Depends(current_user)
+):
+    async with request.app.state.db.acquire() as connection:
+        current = await connection.fetchrow(
+            "SELECT id, title, layout_order FROM chat_olap.dashboard_cards WHERE id = $1 AND owner_id = $2",
+            card_id,
+            user["id"],
+        )
+        if not current:
+            raise HTTPException(404, "Dashboard card not found.")
+        new_title = body.title if body.title is not None else current["title"]
+        new_order = body.layout_order if body.layout_order is not None else current["layout_order"]
+        row = await connection.fetchrow(
+            """
+            UPDATE chat_olap.dashboard_cards
+            SET title = $1, layout_order = $2
+            WHERE id = $3 AND owner_id = $4
+            RETURNING id, title, card_type, content, query_text, source_id, cube_id, session_id, layout_order, created_at
+            """,
+            new_title,
+            new_order,
+            card_id,
+            user["id"],
+        )
+    return {
+        "id": str(row["id"]),
+        "title": row["title"],
+        "card_type": row["card_type"],
+        "content": row["content"],
+        "query_text": row["query_text"],
+        "source_id": str(row["source_id"]) if row["source_id"] else None,
+        "cube_id": str(row["cube_id"]) if row["cube_id"] else None,
+        "session_id": str(row["session_id"]) if row["session_id"] else None,
+        "layout_order": row["layout_order"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    }
+

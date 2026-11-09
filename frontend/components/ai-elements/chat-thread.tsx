@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
-import type { AgentStep, Message as ChatMessage } from "@/lib/api";
+import type { AgentStep, DashboardCard, DashboardCardCreatePayload, Message as ChatMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n/client";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent } from "@/components/ui/message";
@@ -38,12 +38,16 @@ export function ChatThread({
   pendingQuestion,
   steps,
   busy,
+  onPinCard,
+  dashboardCards,
   children,
 }: {
   messages: ChatMessage[];
   pendingQuestion: string;
   steps: AgentStep[];
   busy: boolean;
+  onPinCard?: (payload: DashboardCardCreatePayload) => void;
+  dashboardCards?: DashboardCard[];
   children: ReactNode;
 }) {
   const { t } = useT();
@@ -63,7 +67,11 @@ export function ChatThread({
                       <UserMessage>{message.question}</UserMessage>
                       <Message data-role="assistant">
                         <MessageContent>
-                          <AnalysisResult result={message.result} />
+                          <AnalysisResult
+                            result={message.result}
+                            onPinCard={onPinCard}
+                            dashboardCards={dashboardCards}
+                          />
                         </MessageContent>
                       </Message>
                     </div>

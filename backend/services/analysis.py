@@ -71,6 +71,16 @@ async def execute_plan(pool, settings, cube, plan):
         answer += f" Showing the first {limit} groups; this is not the complete result."
     elapsed = round((time.monotonic() - started) * 1000)
     logger.info("analysis.executed", extra={"duration_ms": elapsed, "row_count": len(rows)})
+    from backend.services.verifier import verify_query_execution
+
+    verification = verify_query_execution(
+        question=answer,
+        sql=sql,
+        rows=rows,
+        columns=columns,
+        truncated=truncated,
+        plan=plan.model_dump(),
+    )
     return {
         "status": "answered",
         "answer": answer,
@@ -84,6 +94,11 @@ async def execute_plan(pool, settings, cube, plan):
         "duration_ms": elapsed,
         "executed_at": datetime.now(timezone.utc).isoformat(),
         "warnings": cube["warnings"],
+        "confidence_score": verification["score"],
+        "confidence_grade": verification["grade"],
+        "assumptions": verification["assumptions"],
+        "caveats": verification["caveats"],
+        "verification": verification,
     }
 
 

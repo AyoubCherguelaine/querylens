@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   ChevronRight,
+  LayoutGrid,
 } from "lucide-react";
 import type { Cube, Session, Source, SourceOverview, UserInfo } from "@/lib/api";
 import { getModelCreditCost } from "@/lib/api";
@@ -64,6 +65,7 @@ export function OverviewDashboard({
   onStartAnalysis,
   onOpenSchemas,
   onOpenUpload,
+  onOpenBoard,
   onOpenSettings,
   onAskPrompt,
 }: {
@@ -77,6 +79,7 @@ export function OverviewDashboard({
   onStartAnalysis: () => void;
   onOpenSchemas: () => void;
   onOpenUpload: () => void;
+  onOpenBoard?: () => void;
   onOpenSettings: (tab?: "model" | "credits") => void;
   onAskPrompt: (prompt: string) => void;
 }) {
@@ -269,6 +272,24 @@ export function OverviewDashboard({
             </div>
             <ArrowRight size={16} className="tile-arrow" />
           </Button>
+
+          {onOpenBoard && (
+            <Button
+              variant="ghost"
+              size="plain"
+              className="action-tile board-tile"
+              onClick={onOpenBoard}
+            >
+              <div className="tile-icon board-icon">
+                <LayoutGrid size={20} />
+              </div>
+              <div className="tile-text">
+                <strong>{dictionary.board.title}</strong>
+                <small>{dictionary.board.subtitle}</small>
+              </div>
+              <ArrowRight size={16} className="tile-arrow" />
+            </Button>
+          )}
 
           <Button
             variant="ghost"

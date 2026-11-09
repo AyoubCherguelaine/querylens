@@ -390,7 +390,7 @@ async def run_agent(
     if custom_instructions.strip():
         agent_instructions += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions.strip()}"
 
-    steps, last_query = [], {}
+    steps, last_query, definitions = [], {}, []
     failure = {"error": "Request cancelled before completion.", "code": "cancelled"}
     active_started = time.monotonic()
     started = time.monotonic()
@@ -411,6 +411,16 @@ async def run_agent(
             await emit({"type": "step", "step": dict(step)})
 
     def outcome(status, answer):
+        from backend.services.verifier import verify_query_execution
+
+        verification = verify_query_execution(
+            question=question,
+            sql=last_query.get("sql"),
+            rows=last_query.get("rows"),
+            columns=last_query.get("columns"),
+            truncated=last_query.get("truncated", False),
+            definitions=definitions,
+        )
         return {
             **last_query,
             "status": status,
@@ -420,10 +430,15 @@ async def run_agent(
             "executed_at": datetime.now(timezone.utc).isoformat(),
             "model_used": model_name,
             "warnings": ["Source samples and query results are sent to the configured model."],
+            "confidence_score": verification["score"],
+            "confidence_grade": verification["grade"],
+            "assumptions": verification["assumptions"],
+            "caveats": verification["caveats"],
+            "verification": verification,
         }
 
     async def loop():
-        nonlocal last_query, active_started
+        nonlocal last_query, active_started, definitions
         selected = selected_cubes if selected_cubes is not None else [cube]
         definitions = await discover(
             pool, settings, schemas=list(dict.fromkeys(c["schema"] for c in selected))

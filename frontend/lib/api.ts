@@ -319,6 +319,20 @@ export type UserInfo = {
   model_settings: ModelSettings;
 };
 
+export type VerificationProof = {
+  score: number;
+  grade: "high" | "medium" | "low";
+  assumptions: string[];
+  caveats: string[];
+  verified_filters?: { field: string; operator: string; value: string }[];
+  proof_of_work?: {
+    ast_verified: boolean;
+    read_only_enforced: boolean;
+    tables_scanned: string[];
+    execution_mode: string;
+  };
+};
+
 export type Result = {
   status: "answered" | "clarification" | "error" | "limit_reached";
   steps?: AgentStep[];
@@ -342,6 +356,11 @@ export type Result = {
   credits_remaining?: number;
   credits_spent?: number;
   model_used?: string;
+  confidence_score?: number;
+  confidence_grade?: "high" | "medium" | "low";
+  assumptions?: string[];
+  caveats?: string[];
+  verification?: VerificationProof;
 };
 export type Message = { id: string; question: string; result: Result };
 export type Session = {
@@ -489,3 +508,141 @@ export async function suggestTables(
     { question, source_id },
   );
 }
+
+export type DashboardCardType = "chart" | "report" | "table" | "metric";
+
+export type DashboardCard = {
+  id: string;
+  title: string;
+  card_type: DashboardCardType;
+  content: any;
+  query_text?: string;
+  source_id?: string;
+  cube_id?: string;
+  session_id?: string;
+  layout_order: number;
+  created_at?: string;
+};
+
+export type DashboardCardCreatePayload = {
+  title: string;
+  card_type: DashboardCardType;
+  content: any;
+  query_text?: string;
+  source_id?: string;
+  cube_id?: string;
+  session_id?: string;
+  layout_order?: number;
+};
+
+const LOCAL_STORAGE_PINS_KEY = "querylens_dashboard_pins_v1";
+
+export async function fetchDashboardCards(): Promise<DashboardCard[]> {
+  try {
+    const cards = await api<DashboardCard[]>("dashboards/cards");
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PINS_KEY, JSON.stringify(cards));
+      } catch (_) {}
+    }
+    return cards;
+  } catch (err) {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_PINS_KEY);
+        if (stored) return JSON.parse(stored);
+      } catch (_) {}
+    }
+    return [];
+  }
+}
+
+export async function pinDashboardCard(payload: DashboardCardCreatePayload): Promise<DashboardCard> {
+  try {
+    const card = await api<DashboardCard>("dashboards/cards", payload);
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_PINS_KEY);
+        const list: DashboardCard[] = stored ? JSON.parse(stored) : [];
+        const updated = [card, ...list.filter((c) => c.id !== card.id)];
+        localStorage.setItem(LOCAL_STORAGE_PINS_KEY, JSON.stringify(updated));
+      } catch (_) {}
+    }
+    return card;
+  } catch (err) {
+    const localCard: DashboardCard = {
+      id: "local-" + Math.random().toString(36).slice(2, 11),
+      title: payload.title,
+      card_type: payload.card_type,
+      content: payload.content,
+      query_text: payload.query_text,
+      source_id: payload.source_id,
+      cube_id: payload.cube_id,
+      session_id: payload.session_id,
+      layout_order: payload.layout_order ?? 0,
+      created_at: new Date().toISOString(),
+    };
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_PINS_KEY);
+        const list: DashboardCard[] = stored ? JSON.parse(stored) : [];
+        const updated = [localCard, ...list];
+        localStorage.setItem(LOCAL_STORAGE_PINS_KEY, JSON.stringify(updated));
+      } catch (_) {}
+    }
+    return localCard;
+  }
+}
+
+export async function deleteDashboardCard(id: string): Promise<void> {
+  try {
+    await api(`dashboards/cards/${id}`, undefined, "DELETE");
+  } catch (_) {}
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_PINS_KEY);
+      if (stored) {
+        const list: DashboardCard[] = JSON.parse(stored);
+        localStorage.setItem(
+          LOCAL_STORAGE_PINS_KEY,
+          JSON.stringify(list.filter((c) => c.id !== id)),
+        );
+      }
+    } catch (_) {}
+  }
+}
+
+export async function updateDashboardCard(
+  id: string,
+  updates: { title?: string; layout_order?: number },
+): Promise<DashboardCard | null> {
+  let updatedCard: DashboardCard | null = null;
+  try {
+    updatedCard = await api<DashboardCard>(`dashboards/cards/${id}`, updates, "PATCH");
+  } catch (_) {}
+
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_PINS_KEY);
+      if (stored) {
+        const list: DashboardCard[] = JSON.parse(stored);
+        const nextList = list.map((c) => {
+          if (c.id === id) {
+            return {
+              ...c,
+              ...(updates.title !== undefined ? { title: updates.title } : {}),
+              ...(updates.layout_order !== undefined ? { layout_order: updates.layout_order } : {}),
+            };
+          }
+          return c;
+        });
+        localStorage.setItem(LOCAL_STORAGE_PINS_KEY, JSON.stringify(nextList));
+        if (!updatedCard) {
+          updatedCard = nextList.find((c) => c.id === id) || null;
+        }
+      }
+    } catch (_) {}
+  }
+  return updatedCard;
+}
+

@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   Layers,
   ChevronDown,
+  Pin,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -78,7 +79,15 @@ function formatKValue(val: number | string | undefined, intl?: string): string {
 type SortOption = "default" | "val_desc" | "val_asc" | "name_asc";
 type GroupMode = "grouped" | "stacked";
 
-export function GraphView({ chart }: { chart: ChartSpec }) {
+export function GraphView({
+  chart,
+  onPin,
+  isPinned,
+}: {
+  chart: ChartSpec;
+  onPin?: () => void;
+  isPinned?: boolean;
+}) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.graph;
   const gradientId = useId();
@@ -512,6 +521,19 @@ export function GraphView({ chart }: { chart: ChartSpec }) {
           >
             <FileSpreadsheet size={15} />
           </Button>
+
+          {onPin && (
+            <Button
+              variant="ghost"
+              size="plain"
+              className={`download-source-btn pin-source-btn ${isPinned ? "success is-pinned" : ""}`}
+              onClick={onPin}
+              title={isPinned ? dictionary.result.unpinFromDashboard : dictionary.result.pinToDashboard}
+            >
+              <Pin size={14} className={isPinned ? "fill-current" : ""} />
+              <span>{isPinned ? dictionary.result.pinned : dictionary.result.pinToDashboard}</span>
+            </Button>
+          )}
         </div>
       </div>
 

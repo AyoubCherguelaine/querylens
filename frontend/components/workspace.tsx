@@ -1,6 +1,6 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
   BarChart3,
@@ -16,6 +16,7 @@ import {
   Sparkles,
   Table2,
   LayoutDashboard,
+  LayoutGrid,
   Coins,
   Cpu,
   Settings as SettingsIcon,
@@ -26,9 +27,14 @@ import {
 import {
   api,
   askAgent,
+  deleteDashboardCard,
+  fetchDashboardCards,
+  pinDashboardCard,
   suggestTables,
   type AgentStep,
   type Cube,
+  type DashboardCard,
+  type DashboardCardCreatePayload,
   type Message,
   type Result,
   type Session,
@@ -42,6 +48,7 @@ import { ChatSidebar } from "./chat-sidebar";
 import { ImportData } from "./import-data";
 import { SourceDashboard } from "./source-dashboard";
 import { OverviewDashboard } from "./overview-dashboard";
+import { DashboardBoard } from "./dashboard-board";
 import { ProfileMainPage } from "./profile-main-page";
 import { SettingsView } from "./settings-view";
 import { SettingsDialog } from "./settings-dialog";
@@ -71,8 +78,9 @@ export function Workspace() {
     [error, setError] = useState(""),
     [tab, setTab] = useState<"analysis" | "schema">("analysis");
   const [view, setView] = useState<
-    "overview" | "sources" | "upload" | "settings" | "profile-main" | "profile-chat"
+    "overview" | "dashboard" | "sources" | "upload" | "settings" | "profile-main" | "profile-chat"
   >("overview");
+  const [dashboardCards, setDashboardCards] = useState<DashboardCard[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"model" | "credits">("model");
   const [insufficientCredits, setInsufficientCredits] = useState<{
@@ -106,17 +114,14 @@ export function Workspace() {
   );
   const sourceCubes = cubes.filter((c) => c.source_id === selectedSource);
   const cube = cubes.find((c) => c.id === selected) || sourceCubes[0];
-  const chatCubeIds = [selected || cube?.id || "", ...extraCubeIds].filter(Boolean);
-  const candidateCubes = cubes.filter((candidate) => {
-    const source = overview.sources.find(
-      (item) => item.id === candidate.source_id,
-    );
-    return (
-      source &&
-      activeSource &&
-      (source.kind === "existing") === (activeSource.kind === "existing")
-    );
-  });
+  const candidateCubes = sourceCubes;
+  const validSourceCubeIds = useMemo(
+    () => new Set(sourceCubes.map((c) => c.id)),
+    [sourceCubes],
+  );
+  const chatCubeIds = [selected || cube?.id || "", ...extraCubeIds].filter(
+    (id) => Boolean(id) && validSourceCubeIds.has(id),
+  );
   const importedTable = activeSource?.manifest.tables?.find(
     (table) => table.name === cube?.definition.table,
   );
@@ -158,12 +163,51 @@ export function Workspace() {
           setSelected(matching[0].id);
         }
       }
+      void loadDashboardCards();
       return { cubes: list, sessions: history, overview: sourceData };
     } catch (e) {
       setError((e as Error).message);
       return { cubes: [], sessions: [], overview };
     } finally {
       setLoadingData(false);
+    }
+  }
+
+  async function loadDashboardCards() {
+    try {
+      const cards = await fetchDashboardCards();
+      setDashboardCards(cards);
+    } catch (err) {
+      console.error("Failed to load dashboard cards", err);
+    }
+  }
+
+  async function handlePinCard(payload: DashboardCardCreatePayload) {
+    const existing = dashboardCards.find(
+      (c) =>
+        c.card_type === payload.card_type &&
+        (c.title === payload.title || (c.query_text && payload.query_text && c.query_text === payload.query_text)),
+    );
+
+    if (existing) {
+      try {
+        await deleteDashboardCard(existing.id);
+        setDashboardCards((prev) => prev.filter((c) => c.id !== existing.id));
+      } catch (e) {
+        console.error("Failed to unpin card", e);
+      }
+    } else {
+      try {
+        const pinned = await pinDashboardCard({
+          ...payload,
+          source_id: selectedSource || undefined,
+          cube_id: selected || undefined,
+          session_id: session || undefined,
+        });
+        setDashboardCards((prev) => [pinned, ...prev.filter((c) => c.id !== pinned.id)]);
+      } catch (e) {
+        console.error("Failed to pin card", e);
+      }
     }
   }
 
@@ -647,6 +691,8 @@ export function Workspace() {
                 <strong>
                   {view === "overview"
                     ? t.overviewNav
+                    : view === "dashboard"
+                    ? dictionary.board.nav
                     : view === "sources"
                     ? t.dataSourcesNav
                     : view === "upload"
@@ -687,6 +733,22 @@ export function Workspace() {
                 <Sparkles size={15} />
                 <span>{dictionary.workspace.chatNav}</span>
               </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className="profile-subnav-btn"
+                disabled={busy}
+                onClick={() => {
+                  setView("dashboard");
+                  setError("");
+                }}
+              >
+                <LayoutGrid size={15} />
+                <span>{dictionary.board.nav}</span>
+                {dashboardCards.length > 0 && (
+                  <span className="nav-badge-count">{dashboardCards.length}</span>
+                )}
+              </Button>
             </nav>
           ) : (
             <nav className="workspace-nav" aria-label={t.nav}>
@@ -703,6 +765,23 @@ export function Workspace() {
               >
                 <LayoutDashboard size={15} />
                 <span>{t.overviewNav}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className={view === "dashboard" ? "active" : ""}
+                aria-current={view === "dashboard" ? "page" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  setView("dashboard");
+                  setError("");
+                }}
+              >
+                <LayoutGrid size={15} />
+                <span>{dictionary.board.nav}</span>
+                {dashboardCards.length > 0 && (
+                  <span className="nav-badge-count">{dashboardCards.length}</span>
+                )}
               </Button>
               <Button
                 variant="ghost"
@@ -872,6 +951,8 @@ export function Workspace() {
                   pendingQuestion={pendingQuestion}
                   steps={agentSteps}
                   busy={busy && !!pendingQuestion}
+                  onPinCard={handlePinCard}
+                  dashboardCards={dashboardCards}
                 >
                   <div className="conversation-empty">
                     <span className="sparkle">
@@ -1033,6 +1114,26 @@ export function Workspace() {
                 </div>
               </div>
             </section>
+          ) : view === "dashboard" ? (
+            <DashboardBoard
+              cards={dashboardCards}
+              onRefresh={loadDashboardCards}
+              onOpenSession={(sessId) => {
+                const sess = sessions.find((s) => s.id === sessId);
+                if (sess) openSession(sess);
+              }}
+              onStartChat={(prompt) => {
+                if (activeSource) {
+                  newChat();
+                  if (prompt) setQuestion(prompt);
+                } else if (overview.sources.length > 0) {
+                  openSource(overview.sources[0].id);
+                  startChatFromProfile(prompt);
+                } else {
+                  setView("upload");
+                }
+              }}
+            />
           ) : view === "sources" ? (
             <SourceDashboard
               overview={overview}
@@ -1081,6 +1182,7 @@ export function Workspace() {
                   setView("sources");
                 }
               }}
+              onOpenBoard={() => setView("dashboard")}
               onOpenUpload={() => setView("upload")}
               onOpenSettings={(targetTab) => {
                 setView("settings");

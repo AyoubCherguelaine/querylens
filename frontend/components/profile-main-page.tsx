@@ -58,6 +58,18 @@ export function ProfileMainPage({
   const [search, setSearch] = useState("");
   const [copiedDdl, setCopiedDdl] = useState(false);
 
+  const schemaPromptStarters = useMemo(() => {
+    const list: { question: string; cubeId?: string }[] = [];
+    for (const c of cubes) {
+      for (const q of c.definition.suggested_questions || []) {
+        if (!list.some((item) => item.question === q)) {
+          list.push({ question: q, cubeId: c.id });
+        }
+      }
+    }
+    return list.slice(0, 5);
+  }, [cubes]);
+
   // Filter tables in this profile
   const sourceCubes = useMemo(() => {
     return cubes.filter((c) => c.source_id === source.id);
@@ -606,7 +618,43 @@ export function ProfileMainPage({
                   ) : (
                     <div className="select-table-prompt">
                       <Table2 size={32} />
-                      <p>{isAr ? "اختر جدولاً من القائمة لعرض بنيته" : "Select a table from the left to inspect its structure"}</p>
+                      <p>
+                        {isAr
+                          ? "اختر جدولاً من القائمة أو ابدأ بأحد الأسئلة التحليلية المقترحة"
+                          : "Select a table from the list or launch a suggested analysis"}
+                      </p>
+                      {schemaPromptStarters.length > 0 && (
+                        <div className="schema-starters-wrap">
+                          <span className="starters-eyebrow">
+                            <Sparkles size={13} />
+                            <span>
+                              {isAr
+                                ? "أسئلة مقترحة لهذا المصدر"
+                                : "Contextual Starter Questions"}
+                            </span>
+                          </span>
+                          <div className="table-questions-grid">
+                            {schemaPromptStarters.map((item) => (
+                              <Button
+                                variant="ghost"
+                                size="plain"
+                                key={item.question}
+                                className="table-question-chip"
+                                onClick={() =>
+                                  onStartChat(
+                                    item.question,
+                                    item.cubeId ? [item.cubeId] : undefined,
+                                  )
+                                }
+                              >
+                                <Sparkles size={13} />
+                                <span>{item.question}</span>
+                                <ArrowRight size={13} className="arrow-icon" />
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </main>

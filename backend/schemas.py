@@ -79,3 +79,19 @@ class TableSuggest(StrictModel):
     question: str = Field(min_length=1, max_length=2000)
     source_id: UUID
 
+
+class DashboardCardCreate(StrictModel):
+    title: str = Field(min_length=1, max_length=200)
+    card_type: Literal["chart", "report", "table", "metric"]
+    content: dict
+    query_text: str | None = Field(default=None, max_length=2000)
+    source_id: UUID | None = None
+    cube_id: UUID | None = None
+    session_id: UUID | None = None
+    layout_order: int = Field(default=0)
+
+
+class DashboardCardUpdate(StrictModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    layout_order: int | None = None
+

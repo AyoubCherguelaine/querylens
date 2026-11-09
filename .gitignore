@@ -22,3 +22,4 @@ coverage/
 .playwright-cli/
 
 consultation
+openai_models.json
