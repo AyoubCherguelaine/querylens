@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 const routes =
-  /^(users\/(login|signup|me|settings|models|credits(\/recharge)?)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/(messages|tables))?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|health\/ready)$/;
+  /^(users\/(login|signup|me|settings|models|credits(\/recharge)?)|cubes(\/discover|\/[a-f0-9-]+\/(analyze|profile))?|chat\/(sessions|session(\/[a-f0-9-]+(\/(messages|tables))?)?)|sources(\/(preview|import|connect|[a-f0-9-]+(\/discover)?))?|dashboards(\/cards(\/[a-f0-9-]+)?)?|health\/ready)$/;
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },

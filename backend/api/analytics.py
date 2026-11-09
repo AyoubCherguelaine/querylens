@@ -164,6 +164,25 @@ async def history(session_id: UUID, request: Request, user=Depends(current_user)
     }
 
 
+@router.delete("/chat/session/{session_id}")
+async def delete_session(session_id: UUID, request: Request, user=Depends(current_user)):
+    await owned_session(request, session_id, user["id"])
+    async with request.app.state.db.acquire() as connection:
+        async with connection.transaction():
+            await connection.execute(
+                "DELETE FROM chat_olap.dashboard_cards WHERE session_id = $1 AND owner_id = $2",
+                session_id,
+                user["id"],
+            )
+            await connection.execute(
+                "DELETE FROM chat_olap.sessions WHERE id = $1 AND owner_id = $2",
+                session_id,
+                user["id"],
+            )
+    return {"status": "deleted", "id": str(session_id)}
+
+
+
 @router.post("/chat/session/{session_id}/tables")
 async def update_tables(
     session_id: UUID, body: SessionTables, request: Request, user=Depends(current_user)

@@ -499,6 +499,18 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
   return data;
 }
 
+export async function deleteSource(
+  id: string,
+): Promise<{ status: string; id: string }> {
+  return api<{ status: string; id: string }>(`sources/${id}`, undefined, "DELETE");
+}
+
+export async function deleteChatSession(
+  id: string,
+): Promise<{ status: string; id: string }> {
+  return api<{ status: string; id: string }>(`chat/session/${id}`, undefined, "DELETE");
+}
+
 export async function suggestTables(
   question: string,
   source_id: string,

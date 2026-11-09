@@ -188,3 +188,67 @@ async def import_dataset(
             await save_cubes(connection, user_id, source["id"], definitions)
     logger.info("source.imported", extra={"row_count": sum(len(t.rows) for t in chosen)})
     return dict(source)
+
+
+async def delete_source(pool, settings, user_id, source):
+    source_id = source["id"]
+    schema_name = source["schema_name"]
+    kind = source["kind"]
+
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            # 1. Clean up pinned dashboard cards linked to this source, its cubes, or its sessions
+            await connection.execute(
+                """DELETE FROM chat_olap.dashboard_cards
+                WHERE owner_id = $1 AND (
+                    source_id = $2
+                    OR cube_id IN (SELECT id FROM chat_olap.cubes WHERE source_id = $2)
+                    OR session_id IN (
+                        SELECT s.id FROM chat_olap.sessions s
+                        WHERE s.cube_id IN (SELECT id FROM chat_olap.cubes WHERE source_id = $2)
+                        OR s.id IN (
+                            SELECT sc.session_id FROM chat_olap.session_cubes sc
+                            JOIN chat_olap.cubes c ON sc.cube_id = c.id
+                            WHERE c.source_id = $2
+                        )
+                    )
+                )""",
+                user_id,
+                source_id,
+            )
+
+            # 2. Delete any sessions linked to this source's cubes (messages and session_cubes cascade)
+            await connection.execute(
+                """DELETE FROM chat_olap.sessions
+                WHERE owner_id = $1 AND (
+                    cube_id IN (SELECT id FROM chat_olap.cubes WHERE source_id = $2)
+                    OR id IN (
+                        SELECT sc.session_id FROM chat_olap.session_cubes sc
+                        JOIN chat_olap.cubes c ON sc.cube_id = c.id
+                        WHERE c.source_id = $2
+                    )
+                )""",
+                user_id,
+                source_id,
+            )
+
+            # 3. Delete the source itself (cubes cascade automatically)
+            await connection.execute(
+                "DELETE FROM chat_olap.sources WHERE id = $1 AND owner_id = $2",
+                source_id,
+                user_id,
+            )
+
+            # 4. If imported dataset (csv, sqlite, excel), drop the physical PostgreSQL schema
+            if kind != "existing":
+                protected = {"chat_olap", "public", "pg_catalog", "information_schema"} | set(
+                    settings.analytics_schemas
+                )
+                if schema_name not in protected:
+                    await connection.execute(f"DROP SCHEMA IF EXISTS {quote(schema_name)} CASCADE")
+
+    logger.info(
+        "source.deleted",
+        extra={"source_id": str(source_id), "user_id": str(user_id), "schema_name": schema_name},
+    )
+

@@ -27,7 +27,9 @@ import {
 import {
   api,
   askAgent,
+  deleteChatSession,
   deleteDashboardCard,
+  deleteSource,
   fetchDashboardCards,
   pinDashboardCard,
   suggestTables,
@@ -244,6 +246,36 @@ export function Workspace() {
     setQuestion("");
     setError("");
     setView("overview");
+  }
+
+  async function handleDeleteSource(sourceId: string) {
+    setBusy(true);
+    try {
+      await deleteSource(sourceId);
+      if (selectedSource === sourceId) {
+        closeSource();
+      }
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSession(sessionId: string) {
+    setBusy(true);
+    try {
+      await deleteChatSession(sessionId);
+      if (session === sessionId) {
+        newChat();
+      }
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function sourceComplete(source: Source) {
@@ -648,6 +680,7 @@ export function Workspace() {
           }}
           onCloseSource={closeSource}
           onSwitchSource={() => setView("sources")}
+          onDeleteSession={handleDeleteSession}
         />
       )}
       <main className="main-panel" inert={showSidebar && leftOpen ? true : undefined}>
@@ -1140,6 +1173,7 @@ export function Workspace() {
               activeSourceId={selectedSource}
               onOpen={openSource}
               onCloseSource={closeSource}
+              onDeleteSource={handleDeleteSource}
               onComplete={sourceComplete}
               onRefresh={async () => {
                 await load();

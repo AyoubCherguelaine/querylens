@@ -13,6 +13,7 @@ from backend.services.import_parser import ImportInvalid, parse_file
 from backend.services.sources import (
     available_definitions,
     connect_existing,
+    delete_source,
     import_dataset,
     save_cubes,
 )
@@ -178,3 +179,16 @@ async def refresh_source(source_id: UUID, request: Request, user=Depends(current
         async with connection.transaction():
             await save_cubes(connection, user["id"], source_id, definitions)
     return {"discovered": len(definitions)}
+
+
+@router.delete("/{source_id}")
+async def remove_source(source_id: UUID, request: Request, user=Depends(current_user)):
+    source = await owned_source(request, source_id, user["id"])
+    await delete_source(
+        request.app.state.db,
+        request.app.state.settings,
+        user["id"],
+        source,
+    )
+    return {"status": "deleted", "id": str(source_id)}
+

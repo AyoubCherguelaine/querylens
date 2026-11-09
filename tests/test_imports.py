@@ -404,6 +404,92 @@ def test_imported_source_limit_per_account(client):
     assert upload(client, other, content).status_code == 201
 
 
+def test_delete_source_with_chats_frees_limit(client):
+    headers = account(client)
+    content = b"region,amount\nNorth,1\n"
+    res1 = upload(client, headers, content)
+    assert res1.status_code == 201
+    source1 = res1.json()
+
+    res2 = upload(client, headers, content)
+    assert res2.status_code == 201
+
+    # Limit of 2 reached
+    third = upload(client, headers, content)
+    assert third.status_code == 422 and "2 imported-source limit" in third.json()["detail"]
+
+    # Create a chat session with source1
+    cubes_res = client.get("/cubes", headers=headers)
+    assert cubes_res.status_code == 200
+    source1_cubes = [c for c in cubes_res.json() if c["source_id"] == source1["id"]]
+    assert len(source1_cubes) > 0
+    primary_cube_id = source1_cubes[0]["id"]
+
+    session_res = client.post(
+        "/chat/session",
+        headers=headers,
+        json={"cube_id": primary_cube_id, "cube_ids": [primary_cube_id]},
+    )
+    assert session_res.status_code == 201
+    session_id = session_res.json()["id"]
+
+    # Verify session exists
+    sessions_res = client.get("/chat/sessions", headers=headers)
+    assert any(s["id"] == session_id for s in sessions_res.json())
+
+    # Delete source1
+    del_res = client.delete(f"/sources/{source1['id']}", headers=headers)
+    assert del_res.status_code == 200
+    assert del_res.json()["status"] == "deleted"
+
+    # Verify source1 is gone from sources list
+    sources_res = client.get("/sources", headers=headers)
+    assert all(s["id"] != source1["id"] for s in sources_res.json()["sources"])
+
+    # Verify source1's cubes are gone
+    cubes_after = client.get("/cubes", headers=headers).json()
+    assert all(c["source_id"] != source1["id"] for c in cubes_after)
+
+    # Verify source1's chat session is cascade deleted
+    sessions_after = client.get("/chat/sessions", headers=headers).json()
+    assert all(s["id"] != session_id for s in sessions_after)
+
+    # Deleting source1 freed up the limit: upload new source successfully
+    res4 = upload(client, headers, content)
+    assert res4.status_code == 201
+
+
+def test_delete_chat_session(client):
+    headers = account(client)
+    content = b"region,amount\nNorth,1\n"
+    res = upload(client, headers, content)
+    assert res.status_code == 201
+    source = res.json()
+
+    cubes = [
+        c
+        for c in client.get("/cubes", headers=headers).json()
+        if c["source_id"] == source["id"]
+    ]
+    session_res = client.post(
+        "/chat/session",
+        headers=headers,
+        json={"cube_id": cubes[0]["id"], "cube_ids": [cubes[0]["id"]]},
+    )
+    assert session_res.status_code == 201
+    session_id = session_res.json()["id"]
+
+    # Delete the session
+    del_res = client.delete(f"/chat/session/{session_id}", headers=headers)
+    assert del_res.status_code == 200
+    assert del_res.json()["status"] == "deleted"
+
+    # Verify session is gone
+    sessions_after = client.get("/chat/sessions", headers=headers).json()
+    assert all(s["id"] != session_id for s in sessions_after)
+
+
+
 def test_multitable_chat_persistence_join_and_ownership(client, tmp_path, monkeypatch):
     from unittest.mock import AsyncMock
 

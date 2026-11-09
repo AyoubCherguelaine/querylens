@@ -12,6 +12,7 @@ import {
   LogOut,
   Settings as SettingsIcon,
   FolderOpen,
+  Trash2,
 } from "lucide-react";
 import type { Cube, Session, Source } from "@/lib/api";
 import { LanguageSwitch, useT } from "@/lib/i18n/client";
@@ -31,6 +32,7 @@ export function ChatSidebar({
   onOpenSettings,
   onCloseSource,
   onSwitchSource,
+  onDeleteSession,
 }: {
   leftOpen: boolean;
   rightOpen?: boolean;
@@ -46,6 +48,7 @@ export function ChatSidebar({
   onOpenSettings?: () => void;
   onCloseSource?: () => void;
   onSwitchSource?: () => void;
+  onDeleteSession?: (id: string) => void | Promise<void>;
 }) {
   const { t: dictionary, intl } = useT();
   const t = dictionary.chats;
@@ -180,29 +183,49 @@ export function ChatSidebar({
       </div>
       <div className="session-list">
         {filtered.map((item) => (
-          <Button
-            variant="ghost"
-            size="plain"
-            className={session === item.id ? "active" : ""}
-            aria-current={session === item.id ? "page" : undefined}
-            disabled={busy}
+          <div
             key={item.id}
-            onClick={() => onOpenSession(item)}
+            className={`session-item-row ${session === item.id ? "active" : ""}`}
           >
-            <MessageSquare size={16} />
-            <span className="session-cell">
-              <bdi
-                className="session-name"
-                title={sessionName(item)}
-                dir="auto"
+            <Button
+              variant="ghost"
+              size="plain"
+              className={`session-btn ${session === item.id ? "active" : ""}`}
+              aria-current={session === item.id ? "page" : undefined}
+              disabled={busy}
+              onClick={() => onOpenSession(item)}
+            >
+              <MessageSquare size={16} />
+              <span className="session-cell">
+                <bdi
+                  className="session-name"
+                  title={sessionName(item)}
+                  dir="auto"
+                >
+                  {sessionName(item)}
+                </bdi>
+                <time className="session-date" dateTime={item.created_at}>
+                  {formatDate(item.created_at)}
+                </time>
+              </span>
+            </Button>
+            {onDeleteSession && (
+              <Button
+                variant="ghost"
+                size="plain"
+                className="session-delete-btn"
+                title={t.deleteChat}
+                aria-label={t.deleteChat}
+                disabled={busy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteSession(item.id);
+                }}
               >
-                {sessionName(item)}
-              </bdi>
-              <time className="session-date" dateTime={item.created_at}>
-                {formatDate(item.created_at)}
-              </time>
-            </span>
-          </Button>
+                <Trash2 size={13} />
+              </Button>
+            )}
+          </div>
         ))}
         {!sessions.length && (
           <div className="history-empty">

@@ -322,6 +322,8 @@ const en = {
               ? "Excel"
               : kind.toUpperCase(),
     signOut: "Sign out",
+    deleteChat: "Delete chat",
+    deleteChatConfirm: "Delete this chat session?",
   },
   schema: {
     label: "Schemas and tables",
@@ -501,6 +503,14 @@ const en = {
       `${count} ${count === 1 ? "table" : "tables"} available`,
     reopen: "Reopen source",
     use: "Use this schema",
+    delete: "Delete",
+    deleteSource: "Delete source",
+    deleteSourceConfirm: "Delete source & chats",
+    deleteSourceTitle: "Delete Data Source",
+    deleteSourcePrompt:
+      "Are you sure you want to delete this source? All associated tables, chats, and saved analyses will be permanently deleted. This will free up your source limit so you can add new sources.",
+    deleting: "Deleting…",
+    cancel: "Cancel",
   },
   overview: {
     title: "Workspace Overview",
@@ -995,6 +1005,8 @@ const ar: Dictionary = {
               ? "Excel"
               : kind.toUpperCase(),
     signOut: "تسجيل الخروج",
+    deleteChat: "حذف المحادثة",
+    deleteChatConfirm: "حذف جلسة المحادثة هذه؟",
   },
   schema: {
     label: "المخططات والجداول",
@@ -1210,6 +1222,14 @@ const ar: Dictionary = {
       }),
     reopen: "إعادة فتح المصدر",
     use: "استخدام هذا المخطط",
+    delete: "حذف",
+    deleteSource: "حذف المصدر",
+    deleteSourceConfirm: "حذف المصدر والمحادثات",
+    deleteSourceTitle: "حذف مصدر البيانات",
+    deleteSourcePrompt:
+      "هل أنت متأكد من حذف هذا المصدر؟ سيتم حذف جميع الجداول والمحادثات والتحليلات المرتبطة به نهائياً. سيؤدي هذا إلى تحرير حد المصادر لديك لتتمكن من إضافة مصادر جديدة.",
+    deleting: "جاري الحذف…",
+    cancel: "إلغاء",
   },
   overview: {
     title: "نظرة عامة على مساحة العمل",

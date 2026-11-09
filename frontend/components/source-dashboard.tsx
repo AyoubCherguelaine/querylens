@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Table2,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { api, type Source, type SourceOverview } from "@/lib/api";
@@ -20,6 +21,7 @@ export function SourceDashboard({
   activeSourceId,
   onOpen,
   onCloseSource,
+  onDeleteSource,
   onComplete,
   onRefresh,
 }: {
@@ -27,6 +29,7 @@ export function SourceDashboard({
   activeSourceId?: string;
   onOpen: (id: string) => void;
   onCloseSource?: () => void;
+  onDeleteSource?: (id: string) => Promise<void>;
   onComplete: (source: Source) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
@@ -34,7 +37,9 @@ export function SourceDashboard({
   const t = dictionary.dashboard;
   const [importing, setImporting] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [sourceToDelete, setSourceToDelete] = useState<Source | null>(null),
+    [deletingId, setDeletingId] = useState<string | null>(null);
   const sources = overview.sources;
   const importedRows = sources
     .flatMap((s) => s.manifest.tables || [])
@@ -218,7 +223,7 @@ export function SourceDashboard({
                     size="plain"
                     className={`source-open ${isActive ? "active-btn" : ""}`}
                     onClick={() => onOpen(source.id)}
-                    disabled={busy}
+                    disabled={busy || Boolean(deletingId)}
                   >
                     {isActive ? "Resume Profile" : "Open Profile"}
                     <ArrowRight size={16} />
@@ -229,16 +234,99 @@ export function SourceDashboard({
                       size="plain"
                       className="source-close-profile-btn"
                       onClick={onCloseSource}
-                      disabled={busy}
+                      disabled={busy || Boolean(deletingId)}
                       title="Close active profile"
                     >
                       Close
+                    </Button>
+                  )}
+                  {onDeleteSource && (
+                    <Button
+                      variant="ghost"
+                      size="plain"
+                      className="source-delete-btn"
+                      onClick={() => setSourceToDelete(source)}
+                      disabled={busy || Boolean(deletingId)}
+                      title={t.deleteSource}
+                      aria-label={t.deleteSource}
+                    >
+                      <Trash2 size={15} />
                     </Button>
                   )}
                 </div>
               </article>
             );
           })}
+        </div>
+      )}
+      {sourceToDelete && (
+        <div
+          className="delete-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+          onClick={() => !deletingId && setSourceToDelete(null)}
+        >
+          <div
+            className="delete-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="delete-modal-header">
+              <div className="delete-modal-icon">
+                <Trash2 size={22} />
+              </div>
+              <div className="delete-modal-titles">
+                <h3 id="delete-dialog-title">{t.deleteSourceTitle}</h3>
+                <p className="delete-modal-sub">
+                  <strong>{sourceToDelete.name}</strong> ({sourceToDelete.schema_name})
+                </p>
+              </div>
+            </div>
+            <p className="delete-modal-text">
+              {t.deleteSourcePrompt}
+            </p>
+            <div className="delete-modal-actions">
+              <Button
+                variant="ghost"
+                size="plain"
+                className="delete-cancel-btn"
+                onClick={() => setSourceToDelete(null)}
+                disabled={Boolean(deletingId)}
+              >
+                {t.cancel}
+              </Button>
+              <Button
+                variant="ghost"
+                size="plain"
+                className="delete-confirm-btn"
+                disabled={Boolean(deletingId)}
+                onClick={async () => {
+                  if (!onDeleteSource) return;
+                  setDeletingId(sourceToDelete.id);
+                  try {
+                    await onDeleteSource(sourceToDelete.id);
+                    setSourceToDelete(null);
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setDeletingId(null);
+                  }
+                }}
+              >
+                {deletingId === sourceToDelete.id ? (
+                  <>
+                    <RefreshCw size={14} className="spin" />
+                    {t.deleting}
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    {t.deleteSourceConfirm}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
       {!!overview.available_schemas.length && (
