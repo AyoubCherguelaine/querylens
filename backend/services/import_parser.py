@@ -260,8 +260,9 @@ def parse_sqlite(data, settings):
         connection.row_factory = sqlite3.Row
         deadline = time.monotonic() + 15
         connection.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
-        connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1024 * 1024)
-        connection.setlimit(sqlite3.SQLITE_LIMIT_COLUMN, settings.import_max_columns)
+        if hasattr(connection, "setlimit"):
+            connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1024 * 1024)
+            connection.setlimit(sqlite3.SQLITE_LIMIT_COLUMN, settings.import_max_columns)
         try:
             connection.execute("PRAGMA query_only=ON")
             connection.execute("PRAGMA trusted_schema=OFF")

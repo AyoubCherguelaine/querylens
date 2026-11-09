@@ -231,6 +231,16 @@ uv pip install -r requirements-dev.txt
 npm run build --prefix frontend
 ```
 
+### Agent evaluation
+
+Run the automated Agent Evaluation Framework to benchmark conversational agent performance, SQL generation, result accuracy, tool selection, clarification handling, and error recovery against isolated datasets:
+
+```bash
+.venv/bin/python scripts/evaluate.py --mock        # fast offline benchmark (15 test scenarios)
+.venv/bin/python scripts/evaluate.py --model gpt-4o-mini  # live model evaluation (requires OPENAI_API_KEY)
+```
+See [docs/EVALUATION.md](docs/EVALUATION.md) for full documentation, custom test case authoring, and CI gate options.
+
 For integration tests, use an **isolated disposable database**: fixtures create a `business` schema, reset its test table, and truncate application metadata. Never point tests at an application or shared data database.
 
 ```bash
