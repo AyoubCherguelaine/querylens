@@ -482,12 +482,14 @@
 .workspace .chat-messages .exchange {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   margin: 0;
 }
 .user-message {
   white-space: pre-wrap;
   text-align: start;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .workspace .chat-messages .result {
   width: 100%;
@@ -664,7 +666,7 @@
   margin: 9px 0 0;
 }
 .workspace .question {
-  font-size: 14px;
+  font-size: 13px;
 }
 .workspace .result {
   font-size: 13px;
@@ -6124,6 +6126,8 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+
 
 
 
