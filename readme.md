@@ -2,6 +2,12 @@
 
 QueryLens is a conversational data analytics workspace with a FastAPI backend, Next.js frontend, and PostgreSQL. Upload a CSV or multi-table SQLite database, organize its tables under a file-named schema, reopen saved sources from the dashboard, and analyze actual query results with inspectable evidence.
 
+## Demo
+
+[![QueryLens Demo](https://img.youtube.com/vi/WlsUtt0Z3J0/maxresdefault.jpg)](https://youtu.be/WlsUtt0Z3J0?si=J0c9jgjy6bSNABrP)
+
+*Watch the walkthrough on YouTube: [https://youtu.be/WlsUtt0Z3J0](https://youtu.be/WlsUtt0Z3J0?si=J0c9jgjy6bSNABrP)*
+
 Chat uses a **conversational tool agent**. It receives the new question, the most recent 30 saved turns, prior SQL attempts and up to five result rows per query (history is capped at 100,000 characters). It can inspect the selected source, sample tables, run multiple SQL queries with joins and subqueries, recover from SQL errors, ask the user for clarification, and answer from observed results. The UI streams model/tool status, inputs, outputs and errors; completed traces are saved with the conversation and can be downloaded as evidence. Sampling offers explicit discovered table references and also resolves bare, schema-qualified, quoted, or unambiguous display names.
 
 Python parses agent SQL with PostgreSQL's parser and permits one SELECT over the chat's selected tables, using joins, derived subqueries or non-recursive CTEs. Physical tables must be fully schema-qualified. Queries use read-only transactions, a restricted search path, a built-in analytics function/cast/operator allowlist, statement timeouts and bounded cursor fetching. Writes, application/system tables, unselected tables, row locking and arbitrary functions are rejected. Model answers still require review against the displayed evidence. The direct structured-plan analysis and profiling actions remain available without a model.
